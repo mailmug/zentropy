@@ -1,5 +1,6 @@
 const std = @import("std");
 
 test {
-    _ = @import("tests/KVStoreTests.zig");
+    _ = @import("tests/kvStoreTests.zig");
+    _ = @import("tests/tcpTests.zig");
 }
