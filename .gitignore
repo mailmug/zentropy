@@ -1,3 +1,42 @@
-.zig-cache/*
-.zig-cache
-zig-out
+# Zig build artifacts
+.zig-cache/
+zig-out/
+zig-cache/
+*.o
+*.obj
+*.exe
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+
+# Zig build output directories
+build/
+dist/
+out/
+
+# Zig installed packages
+zig-packages/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Debug files
+*.debug
+*.pdb
+*.dSYM/
+
+# Coverage reports
+*.profraw
+*.profdata
