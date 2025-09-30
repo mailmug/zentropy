@@ -4,15 +4,13 @@ const net = std.net;
 const posix = std.posix;
 
 pub fn startServer(store: *KVStore) !void {
-    const address = try std.net.Address.parseIp("127.0.0.1", 9000);
+    const address = try std.net.Address.parseIp("127.0.0.1", 6383);
     var listener = try address.listen(.{
         .reuse_address = true,
     });
     defer listener.deinit();
-    std.debug.print("statr", .{});
 
     while (true) {
-        // Wait for client
         var conn = try listener.accept();
 
         // Read request
@@ -21,7 +19,6 @@ pub fn startServer(store: *KVStore) !void {
         if (n == 0) continue;
 
         const msg = buf[0..n];
-        std.debug.print("Received: {s}\n", .{msg});
         try handleConnection(conn, store, msg);
         conn.stream.close();
     }
@@ -37,11 +34,18 @@ fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8)
         return;
     }
     const cmd = parts[0];
-    if (std.mem.eql(u8, cmd, "SET")) {
+    if (std.mem.eql(u8, cmd, "PING")) {
+        if (parts.len != 1) {
+            _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
+            return;
+        }
+        _ = try conn.stream.writeAll("+Hello\r\n");
+    } else if (std.mem.eql(u8, cmd, "SET")) {
         if (parts.len != 3) {
             _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
             return;
         }
+
         try store.put(parts[1], parts[2]);
         _ = try conn.stream.writeAll("+OK\r\n");
     } else if (std.mem.eql(u8, cmd, "GET")) {
@@ -49,8 +53,9 @@ fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8)
             _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
             return;
         }
-        const val = store.get(parts[1]);
-        std.debug.print("0000 {s}", .{parts[1]});
+        const key = parts[1];
+        const key_str = std.mem.trim(u8, key, "\r\n");
+        const val = store.get(key_str);
 
         if (val) |v| {
             _ = try conn.stream.writeAll(v);
