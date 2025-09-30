@@ -2,8 +2,9 @@ const std = @import("std");
 const fs = std.fs;
 const KVStore = @import("KVStore.zig");
 const tcp = @import("tcp.zig");
+const shutdown = @import("shutdown.zig");
 
-pub fn startServer(store: *KVStore, unix_path: []const u8, allocator: std.mem.Allocator, stop_server: *bool) !void {
+pub fn startServer(store: *KVStore, unix_path: []const u8, allocator: std.mem.Allocator, stop_server: *std.atomic.Value(bool)) !void {
     // Make sure old socket is removed
     _ = fs.cwd().deleteFile(unix_path) catch {};
 
@@ -13,7 +14,7 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, allocator: std.mem.Al
     });
     defer listener.deinit();
     defer fs.cwd().deleteFile(unix_path) catch {};
-    while (!stop_server.*) {
+    while (!stop_server.load(.seq_cst)) {
         const conn = listener.accept() catch continue;
 
         // Read request
@@ -25,8 +26,8 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, allocator: std.mem.Al
         const result = try tcp.handleConnection(conn, store, msg, allocator);
 
         if (std.mem.eql(u8, result, "SHUTDOWN")) {
-            stop_server.* = true;
-            store.deinit();
+            stop_server.store(true, .seq_cst);
+            shutdown.send("tcp") catch {};
         }
         conn.stream.close();
     }

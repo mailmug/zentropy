@@ -8,7 +8,8 @@ pub fn main() !void {
     defer store.deinit();
 
     const socket_path = "/tmp/zentropy.sock";
-    var stop_server: bool = false;
+
+    var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
     // Start TCP server in a thread
     var tcp_thread = try std.Thread.spawn(.{}, tcp.startServer, .{ &store, allocator, &stop_server });

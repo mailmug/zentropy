@@ -99,7 +99,6 @@ test "stop server" {
     const w = &writer.interface;
     w.writeAll("SHUTDOWN") catch unreachable;
     w.flush() catch unreachable;
-    stop_server = true;
     const response = readResponse(conn, &buf);
     try std.testing.expect(std.mem.indexOf(u8, response, "===SHUTDOWN===") != null);
 }
