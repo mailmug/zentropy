@@ -2,6 +2,7 @@ const std = @import("std");
 const KVStore = @import("KVStore.zig");
 const net = std.net;
 const posix = std.posix;
+const tcp = @This();
 
 pub fn startServer(store: *KVStore) !void {
     const address = try std.net.Address.parseIp("127.0.0.1", 6383);
@@ -11,7 +12,7 @@ pub fn startServer(store: *KVStore) !void {
     defer listener.deinit();
 
     while (true) {
-        var conn = try listener.accept();
+        var conn = listener.accept() catch continue;
 
         // Read request
         var buf: [1024]u8 = undefined;
@@ -24,7 +25,7 @@ pub fn startServer(store: *KVStore) !void {
     }
 }
 
-fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8) !void {
+pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8) !void {
     // Parse commands: SET key value or GET key
     const allocator = std.heap.page_allocator;
     var partsList = splitToArray(msg, allocator) catch unreachable;
@@ -33,7 +34,10 @@ fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8)
     if (parts.len == 0) {
         return;
     }
-    const cmd = parts[0];
+
+    const _cmd = parts[0];
+    const cmd = std.mem.trim(u8, _cmd, "\r\n");
+
     if (std.mem.eql(u8, cmd, "PING")) {
         if (parts.len != 1) {
             _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
@@ -61,7 +65,7 @@ fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8)
             _ = try conn.stream.writeAll(v);
             _ = try conn.stream.writeAll("\r\n");
         } else {
-            _ = try conn.stream.writeAll("$-1\r\n");
+            _ = try conn.stream.writeAll("NONE\r\n");
         }
     } else {
         _ = try conn.stream.writeAll("-ERR unknown command\r\n");

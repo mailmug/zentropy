@@ -6,7 +6,7 @@ test "tcp server responds" {
     const allocator = std.heap.page_allocator;
 
     // Run server in another thread
-    _ = try std.Thread.spawn(.{}, start, .{allocator});
+    _ = try std.Thread.spawn(.{}, startServer, .{allocator});
 
     // Give server a moment to start
     std.Thread.sleep(1 * std.time.ns_per_s);
@@ -63,7 +63,7 @@ test "tcp server get data" {
     try std.testing.expect(std.mem.indexOf(u8, response, "red") != null);
 }
 
-fn start(allocator: std.mem.Allocator) void {
+fn startServer(allocator: std.mem.Allocator) void {
     var store = KVStore.init(allocator);
 
     tcp.startServer(&store) catch |err| {
