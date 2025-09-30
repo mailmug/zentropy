@@ -39,37 +39,52 @@ pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: [
     const cmd = std.mem.trim(u8, _cmd, "\r\n");
 
     if (std.mem.eql(u8, cmd, "PING")) {
-        if (parts.len != 1) {
-            _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
+        if (validCheckCmdLen(parts.len, 1, conn)) {
+            _ = try conn.stream.writeAll("+Hello\r\n");
             return;
         }
-        _ = try conn.stream.writeAll("+Hello\r\n");
     } else if (std.mem.eql(u8, cmd, "SET")) {
-        if (parts.len != 3) {
-            _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
+        if (validCheckCmdLen(parts.len, 3, conn)) {
+            try store.put(parts[1], parts[2]);
+            _ = try conn.stream.writeAll("+OK\r\n");
             return;
         }
-
-        try store.put(parts[1], parts[2]);
-        _ = try conn.stream.writeAll("+OK\r\n");
     } else if (std.mem.eql(u8, cmd, "GET")) {
-        if (parts.len != 2) {
-            _ = try conn.stream.writeAll("-ERR wrong number of arguments\r\n");
+        if (validCheckCmdLen(parts.len, 2, conn)) {
+            const key = parts[1];
+            const key_str = std.mem.trim(u8, key, "\r\n");
+            const val = store.get(key_str);
+
+            if (val) |v| {
+                _ = try conn.stream.writeAll(v);
+                _ = try conn.stream.writeAll("\r\n");
+            } else {
+                _ = try conn.stream.writeAll("NONE\r\n");
+            }
             return;
         }
-        const key = parts[1];
-        const key_str = std.mem.trim(u8, key, "\r\n");
-        const val = store.get(key_str);
-
-        if (val) |v| {
-            _ = try conn.stream.writeAll(v);
-            _ = try conn.stream.writeAll("\r\n");
-        } else {
-            _ = try conn.stream.writeAll("NONE\r\n");
+    } else if (std.mem.eql(u8, cmd, "DELETE")) {
+        if (validCheckCmdLen(parts.len, 2, conn)) {
+            const key = parts[1];
+            if (store.delete(key)) {
+                return try conn.stream.writeAll("+DELETED\r\n");
+            }
+            return try conn.stream.writeAll("NOT DELETED\r\n");
         }
     } else {
-        _ = try conn.stream.writeAll("-ERR unknown command\r\n");
+        if (validCheckCmdLen(parts.len, 2, conn)) {
+            _ = try conn.stream.writeAll("-ERR unknown command\r\n");
+            return;
+        }
     }
+}
+
+fn validCheckCmdLen(len: usize, expectedLen: usize, conn: std.net.Server.Connection) bool {
+    if (len != expectedLen) {
+        _ = conn.stream.writeAll("-ERR wrong number of arguments\r\n") catch {};
+        return false;
+    }
+    return true;
 }
 
 fn splitToArray(msg: []u8, allocator: std.mem.Allocator) !std.ArrayList([]u8) {
