@@ -1,9 +1,14 @@
 const std = @import("std");
 const KVStore = @import("KVStore.zig");
-
+const tcp = @import("tcp.zig");
 pub fn main() !void {
     const gpa = std.heap.page_allocator;
     var store = KVStore.init(gpa);
+
+    tcp.startServer(&store) catch |err| {
+        std.debug.print("Server error: {}\n", .{err});
+    };
+    if (true) return;
     defer store.deinit();
 
     try store.put("apple", "red");

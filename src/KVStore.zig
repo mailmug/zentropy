@@ -22,10 +22,10 @@ pub fn deinit(self: *KVStore) void {
 }
 
 pub fn put(self: *Self, key: []const u8, value: []const u8) !void {
-    // if (self.map.fetchOrderedRemove(key)) |entry| {
-    //     self.allocator.free(entry.key);
-    //     self.allocator.free(entry.value);
-    // }
+    if (self.map.fetchOrderedRemove(key)) |entry| {
+        self.allocator.free(entry.key);
+        self.allocator.free(entry.value);
+    }
 
     try self.map.put(try self.allocator.dupe(u8, key), try self.allocator.dupe(u8, value));
 }
