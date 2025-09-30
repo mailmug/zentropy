@@ -13,8 +13,8 @@ pub fn init(allocator: std.mem.Allocator) Self {
 }
 
 pub fn deinit(self: *KVStore) void {
-    var it = self.map.iterator();
-    while (it.next()) |entry| {
+    var iterator = self.map.iterator();
+    while (iterator.next()) |entry| {
         self.allocator.free(entry.key_ptr.*);
         self.allocator.free(entry.value_ptr.*);
     }
@@ -26,8 +26,13 @@ pub fn put(self: *Self, key: []const u8, value: []const u8) !void {
         self.allocator.free(entry.key);
         self.allocator.free(entry.value);
     }
+    const key_copy = try self.allocator.dupe(u8, key);
+    const value_copy = try self.allocator.dupe(u8, value);
 
-    try self.map.put(try self.allocator.dupe(u8, key), try self.allocator.dupe(u8, value));
+    self.map.put(key_copy, value_copy) catch {
+        self.allocator.free(key_copy);
+        self.allocator.free(value_copy);
+    };
 }
 
 pub fn get(self: *Self, key: []const u8) ?[]const u8 {

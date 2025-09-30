@@ -3,15 +3,16 @@ const KVStore = @import("KVStore.zig");
 const net = std.net;
 const posix = std.posix;
 const tcp = @This();
+const shutdown = @import("shutdown.zig");
 
-pub fn startServer(store: *KVStore) !void {
+pub fn startServer(store: *KVStore, allocator: std.mem.Allocator, stop_server: *bool) !void {
     const address = try std.net.Address.parseIp("127.0.0.1", 6383);
     var listener = try address.listen(.{
         .reuse_address = true,
     });
     defer listener.deinit();
 
-    while (true) {
+    while (!stop_server.*) {
         var conn = listener.accept() catch continue;
 
         // Read request
@@ -20,19 +21,28 @@ pub fn startServer(store: *KVStore) !void {
         if (n == 0) continue;
 
         const msg = buf[0..n];
-        try handleConnection(conn, store, msg);
+        const result = try handleConnection(conn, store, msg, allocator);
+
+        if (std.mem.eql(u8, result, "SHUTDOWN")) {
+            stop_server.* = true;
+            store.deinit();
+        }
         conn.stream.close();
     }
 }
 
-pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8) !void {
-    // Parse commands: SET key value or GET key
-    const allocator = std.heap.page_allocator;
+pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
     var partsList = splitToArray(msg, allocator) catch unreachable;
-    defer partsList.deinit(allocator);
+    defer {
+        for (partsList.items) |part| {
+            allocator.free(part);
+        }
+        partsList.deinit(allocator);
+    }
+
     const parts = partsList.items;
     if (parts.len == 0) {
-        return;
+        return "";
     }
 
     const _cmd = parts[0];
@@ -40,14 +50,14 @@ pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: [
 
     if (std.mem.eql(u8, cmd, "PING")) {
         if (validCheckCmdLen(parts.len, 1, conn)) {
-            _ = try conn.stream.writeAll("+Hello\r\n");
-            return;
+            _ = try conn.stream.writeAll("PONG\r\n");
+            return "";
         }
     } else if (std.mem.eql(u8, cmd, "SET")) {
         if (validCheckCmdLen(parts.len, 3, conn)) {
             try store.put(parts[1], parts[2]);
             _ = try conn.stream.writeAll("+OK\r\n");
-            return;
+            return "";
         }
     } else if (std.mem.eql(u8, cmd, "GET")) {
         if (validCheckCmdLen(parts.len, 2, conn)) {
@@ -61,22 +71,28 @@ pub fn handleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: [
             } else {
                 _ = try conn.stream.writeAll("NONE\r\n");
             }
-            return;
+            return "";
         }
     } else if (std.mem.eql(u8, cmd, "DELETE")) {
         if (validCheckCmdLen(parts.len, 2, conn)) {
             const key = parts[1];
             if (store.delete(key)) {
-                return try conn.stream.writeAll("+DELETED\r\n");
+                try conn.stream.writeAll("+DELETED\r\n");
+                return "";
             }
-            return try conn.stream.writeAll("NOT DELETED\r\n");
+            try conn.stream.writeAll("NOT DELETED\r\n");
+            return "";
         }
+    } else if (std.mem.eql(u8, cmd, "SHUTDOWN")) {
+        try conn.stream.writeAll("===SHUTDOWN===\r\n");
+        return "SHUTDOWN";
     } else {
         if (validCheckCmdLen(parts.len, 2, conn)) {
             _ = try conn.stream.writeAll("-ERR unknown command\r\n");
-            return;
+            return "";
         }
     }
+    return "";
 }
 
 fn validCheckCmdLen(len: usize, expectedLen: usize, conn: std.net.Server.Connection) bool {
