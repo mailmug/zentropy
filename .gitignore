@@ -2,7 +2,7 @@
 .zig-cache/
 zig-out/
 zig-cache/
-zig-out/bin/
+zig-out/bin/*
 *.o
 *.obj
 *.exe

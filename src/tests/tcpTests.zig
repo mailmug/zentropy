@@ -1,7 +1,7 @@
 const std = @import("std");
 const tcp = @import("../tcp.zig");
 const KVStore = @import("../KVStore.zig");
-var stop_server = false;
+var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
 test "tcp server responds" {
     const allocator = std.testing.allocator;
