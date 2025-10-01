@@ -30,9 +30,9 @@ GET apple
 ```
 
 
-## Using socat
+## Using unix socket
 ```bash
-echo "PING" | socat - UNIX-CONNECT:/tmp/zentropy.sock
+echo "PING" | nc -U /tmp/zentropy.sock
 # -> +PONG
 ```
 
