@@ -5,10 +5,9 @@ var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 var server_thread: ?std.Thread = null;
 
 test "tcp server responds" {
-    const allocator = std.testing.allocator;
 
     // Run server in another thread
-    server_thread = try std.Thread.spawn(.{}, startServer, .{allocator});
+    server_thread = try std.Thread.spawn(.{}, startServer, .{});
 
     // Give server a moment to start
     std.Thread.sleep(1 * std.time.ns_per_s);
@@ -105,7 +104,17 @@ test "stop server" {
     defer server_thread.?.join();
 }
 
-fn startServer(allocator: std.mem.Allocator) void {
+fn startServer() void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const check = gpa.deinit();
+        switch (check) {
+            .ok => {},
+            .leak => @panic("Memory leak detected!"),
+        }
+    }
+
+    const allocator = gpa.allocator();
     var store = KVStore.init(allocator);
     defer store.deinit();
 
