@@ -1,6 +1,7 @@
 const std = @import("std");
 const KVStore = @import("KVStore.zig");
 const commands = @This();
+const info = @import("info.zig");
 
 pub fn parseCmd(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
     var partsList = splitToArray(msg, allocator) catch unreachable;
@@ -22,6 +23,16 @@ pub fn parseCmd(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, all
     if (std.mem.eql(u8, cmd, "PING")) {
         if (validCheckCmdLen(parts.len, 1, conn)) {
             _ = try conn.stream.writeAll("PONG\r\n");
+            return "";
+        }
+    } else if (std.mem.eql(u8, cmd, "INFO")) {
+        if (validCheckCmdLen(parts.len, 1, conn)) {
+            const infoStr = info.name ++ " " ++ info.version;
+            _ = try conn.stream.writeAll(infoStr ++ "\r\n");
+            const count = store.count();
+            const message = try std.fmt.allocPrint(allocator, "total_keys:{}\r\n", .{count});
+            defer allocator.free(message);
+            _ = try conn.stream.writeAll(message);
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "SET")) {

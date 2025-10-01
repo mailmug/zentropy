@@ -42,6 +42,9 @@ pub fn get(self: *Self, key: []const u8) ?[]const u8 {
 pub fn contains(self: *Self, key: []const u8) bool {
     return self.map.contains(key);
 }
+pub fn count(self: *Self) usize {
+    return self.map.count();
+}
 
 pub fn delete(self: *KVStore, key: []const u8) bool {
     if (self.map.fetchOrderedRemove(key)) |entry| {
