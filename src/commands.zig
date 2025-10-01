@@ -2,8 +2,9 @@ const std = @import("std");
 const KVStore = @import("KVStore.zig");
 const commands = @This();
 const info = @import("info.zig");
+const posix = std.posix;
 
-pub fn parseCmd(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
+pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
     var partsList = splitToArray(msg, allocator) catch unreachable;
     defer {
         for (partsList.items) |part| {
@@ -21,78 +22,78 @@ pub fn parseCmd(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, all
     const cmd = std.mem.trim(u8, _cmd, "\r\n");
 
     if (std.mem.eql(u8, cmd, "PING")) {
-        if (validCheckCmdLen(parts.len, 1, conn)) {
-            _ = try conn.stream.writeAll("PONG\r\n");
+        if (validCheckCmdLen(parts.len, 1, fd)) {
+            _ = try posix.write(fd, "PONG\r\n");
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "INFO")) {
-        if (validCheckCmdLen(parts.len, 1, conn)) {
+        if (validCheckCmdLen(parts.len, 1, fd)) {
             const infoStr = info.name ++ " " ++ info.version;
-            _ = try conn.stream.writeAll(infoStr ++ "\r\n");
+            _ = try posix.write(fd, infoStr ++ "\r\n");
             const count = store.count();
             const message = try std.fmt.allocPrint(allocator, "total_keys:{}\r\n", .{count});
             defer allocator.free(message);
-            _ = try conn.stream.writeAll(message);
+            _ = try posix.write(fd, message);
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "SET")) {
-        if (validCheckCmdLen(parts.len, 3, conn)) {
+        if (validCheckCmdLen(parts.len, 3, fd)) {
             try store.put(parts[1], parts[2]);
-            _ = try conn.stream.writeAll("+OK\r\n");
+            _ = try posix.write(fd, "+OK\r\n");
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "GET")) {
-        if (validCheckCmdLen(parts.len, 2, conn)) {
+        if (validCheckCmdLen(parts.len, 2, fd)) {
             const key = parts[1];
             const key_str = std.mem.trim(u8, key, "\r\n");
             const val = store.get(key_str);
 
             if (val) |v| {
-                _ = try conn.stream.writeAll(v);
-                _ = try conn.stream.writeAll("\r\n");
+                _ = try posix.write(fd, v);
+                _ = try posix.write(fd, "\r\n");
             } else {
-                _ = try conn.stream.writeAll("NONE\r\n");
+                _ = try posix.write(fd, "NONE\r\n");
             }
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "EXISTS")) {
-        if (validCheckCmdLen(parts.len, 2, conn)) {
+        if (validCheckCmdLen(parts.len, 2, fd)) {
             const key = parts[1];
             const key_str = std.mem.trim(u8, key, "\r\n");
             const exists = store.contains(key_str);
 
             if (exists) {
-                _ = try conn.stream.writeAll("1\r\n");
+                _ = try posix.write(fd, "1\r\n");
             } else {
-                _ = try conn.stream.writeAll("0\r\n");
+                _ = try posix.write(fd, "0\r\n");
             }
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "DELETE")) {
-        if (validCheckCmdLen(parts.len, 2, conn)) {
+        if (validCheckCmdLen(parts.len, 2, fd)) {
             const key = parts[1];
             if (store.delete(key)) {
-                try conn.stream.writeAll("+DELETED\r\n");
+                _ = posix.write(fd, "+DELETED\r\n") catch {};
                 return "";
             }
-            try conn.stream.writeAll("NOT DELETED\r\n");
+            _ = posix.write(fd, "NOT DELETED\r\n") catch {};
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "SHUTDOWN")) {
-        try conn.stream.writeAll("===SHUTDOWN===\r\n");
+        _ = posix.write(fd, "===SHUTDOWN===\r\n") catch {};
         return "SHUTDOWN";
     } else {
-        if (validCheckCmdLen(parts.len, 2, conn)) {
-            _ = try conn.stream.writeAll("-ERR unknown command\r\n");
+        if (validCheckCmdLen(parts.len, 2, fd)) {
+            _ = posix.write(fd, "-ERR unknown command\r\n") catch {};
             return "";
         }
     }
     return "";
 }
 
-fn validCheckCmdLen(len: usize, expectedLen: usize, conn: std.net.Server.Connection) bool {
+fn validCheckCmdLen(len: usize, expectedLen: usize, fd: i32) bool {
     if (len != expectedLen) {
-        _ = conn.stream.writeAll("-ERR wrong number of arguments\r\n") catch {};
+        _ = posix.write(fd, "-ERR wrong number of arguments\r\n") catch {};
         return false;
     }
     return true;
