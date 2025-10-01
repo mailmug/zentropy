@@ -39,6 +39,10 @@ pub fn get(self: *Self, key: []const u8) ?[]const u8 {
     return self.map.get(key);
 }
 
+pub fn contains(self: *Self, key: []const u8) bool {
+    return self.map.contains(key);
+}
+
 pub fn delete(self: *KVStore, key: []const u8) bool {
     if (self.map.fetchOrderedRemove(key)) |entry| {
         self.allocator.free(entry.key);

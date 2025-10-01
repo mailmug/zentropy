@@ -89,6 +89,22 @@ test "tcp server get data" {
     try std.testing.expect(std.mem.indexOf(u8, response, "red") != null);
 }
 
+test "tcp server exists data" {
+
+    // Client connects
+    const address = try std.net.Address.parseIp4("127.0.0.1", 6383);
+    var conn = try std.net.tcpConnectToAddress(address);
+    defer conn.close();
+    var buf: [1024]u8 = undefined;
+    var writer = conn.writer(&buf);
+    const w = &writer.interface;
+    w.writeAll("EXISTS apple") catch unreachable;
+    w.flush() catch unreachable;
+
+    const response = readResponse(conn, &buf);
+    try std.testing.expect(std.mem.indexOf(u8, response, "1") != null);
+}
+
 test "stop server" {
     // SHUTDOWN
     const address = try std.net.Address.parseIp4("127.0.0.1", 6383);
