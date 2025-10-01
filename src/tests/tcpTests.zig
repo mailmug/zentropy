@@ -2,12 +2,13 @@ const std = @import("std");
 const tcp = @import("../tcp.zig");
 const KVStore = @import("../KVStore.zig");
 var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+var server_thread: ?std.Thread = null;
 
 test "tcp server responds" {
     const allocator = std.testing.allocator;
 
     // Run server in another thread
-    _ = try std.Thread.spawn(.{}, startServer, .{allocator});
+    server_thread = try std.Thread.spawn(.{}, startServer, .{allocator});
 
     // Give server a moment to start
     std.Thread.sleep(1 * std.time.ns_per_s);
@@ -101,6 +102,7 @@ test "stop server" {
     w.flush() catch unreachable;
     const response = readResponse(conn, &buf);
     try std.testing.expect(std.mem.indexOf(u8, response, "===SHUTDOWN===") != null);
+    defer server_thread.?.join();
 }
 
 fn startServer(allocator: std.mem.Allocator) void {
