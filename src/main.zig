@@ -4,6 +4,8 @@ const tcp = @import("tcp.zig");
 const unixSocket = @import("unixSocket.zig");
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
+    // const allocator = gpa.allocator();
+    // defer _ = gpa.deinit();
     var store = KVStore.init(allocator);
     defer store.deinit();
 
@@ -12,7 +14,7 @@ pub fn main() !void {
     var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
     // Start TCP server in a thread
-    var tcp_thread = try std.Thread.spawn(.{}, tcp.startServer, .{ &store, allocator, &stop_server });
+    var tcp_thread = try std.Thread.spawn(.{}, tcp.startServer, .{ &store, &stop_server });
 
     // Start Unix socket server in main thread (or another thread)
     // var unix_thread = try std.Thread.spawn(.{}, unixSocket.startServer, .{ &store, socket_path, allocator, &stop_server });

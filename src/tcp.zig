@@ -33,7 +33,7 @@ const commands = @import("commands.zig");
 //     }
 // }
 
-pub fn startServer(store: *KVStore, allocator: std.mem.Allocator, stop_server: *std.atomic.Value(bool)) !void {
+pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool)) !void {
     const address = try std.net.Address.parseIp("127.0.0.1", 6383);
 
     const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
@@ -117,8 +117,10 @@ pub fn startServer(store: *KVStore, allocator: std.mem.Allocator, stop_server: *
                     // probably closed on the other side
                     closed = true;
                 } else {
+                    // _ = try posix.write(polled.fd, "oo\r\n");
+
                     const msg = buf[0..read];
-                    const result = try handleConnection(polled.fd, store, msg, allocator);
+                    const result = try handleConnection(polled.fd, store, msg);
                     if (std.mem.eql(u8, result, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
                         // shutdown.send("unix_socket") catch {};
@@ -154,9 +156,9 @@ pub fn startServer(store: *KVStore, allocator: std.mem.Allocator, stop_server: *
     }
 }
 
-pub fn windowsHandleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
-    return commands.parseCmd(conn, store, msg, allocator);
+pub fn windowsHandleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8) ![]const u8 {
+    return commands.parseCmd(conn, store, msg);
 }
-pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
-    return commands.parseCmd(fd, store, msg, allocator);
+pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
+    return commands.parseCmd(fd, store, msg);
 }

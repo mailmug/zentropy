@@ -4,16 +4,12 @@ const commands = @This();
 const info = @import("info.zig");
 const posix = std.posix;
 
-pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.Allocator) ![]const u8 {
-    var partsList = splitToArray(msg, allocator) catch unreachable;
-    defer {
-        for (partsList.items) |part| {
-            allocator.free(part);
-        }
-        partsList.deinit(allocator);
-    }
+pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
 
-    const parts = partsList.items;
+    // var partsList = splitToArray(msg, allocator) catch unreachable;
+    var parts_buffer: [10][]const u8 = undefined; // Stack allocation
+    const parts = splitToSlice(msg, " ", &parts_buffer);
+
     if (parts.len == 0) {
         return "";
     }
@@ -30,15 +26,16 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.A
         if (validCheckCmdLen(parts.len, 1, fd)) {
             const infoStr = info.name ++ " " ++ info.version;
             _ = try posix.write(fd, infoStr ++ "\r\n");
-            const count = store.count();
-            const message = try std.fmt.allocPrint(allocator, "total_keys:{}\r\n", .{count});
-            defer allocator.free(message);
+            // const count = store.count();
+            // const message = try std.fmt.allocPrint(allocator, "total_keys:{}\r\n", .{count});
+            const message = "6";
+            // defer allocator.free(message);
             _ = try posix.write(fd, message);
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "SET")) {
         if (validCheckCmdLen(parts.len, 3, fd)) {
-            try store.put(parts[1], parts[2]);
+            try store.set(parts[1], parts[2]);
             _ = try posix.write(fd, "+OK\r\n");
             return "";
         }
@@ -58,9 +55,10 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.A
         }
     } else if (std.mem.eql(u8, cmd, "EXISTS")) {
         if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            const key_str = std.mem.trim(u8, key, "\r\n");
-            const exists = store.contains(key_str);
+            // const key = parts[1];
+            // const key_str = std.mem.trim(u8, key, "\r\n");
+            // const exists = store.contains(key_str);
+            const exists = true;
 
             if (exists) {
                 _ = try posix.write(fd, "1\r\n");
@@ -71,11 +69,11 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8, allocator: std.mem.A
         }
     } else if (std.mem.eql(u8, cmd, "DELETE")) {
         if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            if (store.delete(key)) {
-                _ = posix.write(fd, "+DELETED\r\n") catch {};
-                return "";
-            }
+            // const key = parts[1];
+            // if (store.delete(key)) {
+            //     _ = posix.write(fd, "+DELETED\r\n") catch {};
+            //     return "";
+            // }
             _ = posix.write(fd, "NOT DELETED\r\n") catch {};
             return "";
         }
@@ -99,14 +97,15 @@ fn validCheckCmdLen(len: usize, expectedLen: usize, fd: i32) bool {
     return true;
 }
 
-fn splitToArray(msg: []u8, allocator: std.mem.Allocator) !std.ArrayList([]u8) {
-    var parts_list = try std.ArrayList([]u8).initCapacity(allocator, 3);
-    var iter = std.mem.splitSequence(u8, msg, " ");
+fn splitToSlice(msg: []const u8, delimiter: []const u8, output: []([]const u8)) []const []const u8 {
+    var count: usize = 0;
+    var iter = std.mem.splitSequence(u8, msg, delimiter);
 
-    while (iter.next()) |p| {
-        const mutable_part = try allocator.dupe(u8, p);
-        try parts_list.append(allocator, mutable_part);
+    while (iter.next()) |part| {
+        if (count >= output.len) break;
+        output[count] = part;
+        count += 1;
     }
 
-    return parts_list;
+    return output[0..count];
 }

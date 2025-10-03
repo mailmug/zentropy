@@ -1,55 +1,70 @@
 const std = @import("std");
 
-allocator: std.mem.Allocator,
-map: std.StringArrayHashMap([]const u8),
-const KVStore = @This();
-const Self = KVStore;
+pub const KVStore = @This();
 
-pub fn init(allocator: std.mem.Allocator) Self {
-    return Self{
+allocator: std.mem.Allocator,
+
+// Use AutoHashMap for automatic sizing
+map: std.StringHashMapUnmanaged(Entry) = .{},
+
+// Memory pool for key/value storage
+arena: std.heap.ArenaAllocator,
+
+const Entry = struct {
+    value: []const u8,
+};
+
+pub fn init(allocator: std.mem.Allocator) KVStore {
+    var self = KVStore{
         .allocator = allocator,
-        .map = std.StringArrayHashMap([]const u8).init(allocator),
+        .arena = std.heap.ArenaAllocator.init(allocator),
     };
+
+    // Pre-allocate some capacity
+    self.map.ensureTotalCapacity(allocator, 10000) catch unreachable;
+
+    return self;
 }
 
 pub fn deinit(self: *KVStore) void {
-    var iterator = self.map.iterator();
-    while (iterator.next()) |entry| {
-        self.allocator.free(entry.key_ptr.*);
-        self.allocator.free(entry.value_ptr.*);
+    self.map.deinit(self.allocator);
+    self.arena.deinit();
+}
+
+pub fn set(self: *KVStore, key: []const u8, value: []const u8) !void {
+    const arena = self.arena.allocator();
+
+    // Copy strings to arena
+    const key_copy = try arena.dupe(u8, key);
+    const value_copy = try arena.dupe(u8, value);
+
+    const entry = Entry{ .value = value_copy };
+
+    // Use getOrPut to handle both new and existing keys
+    const gop = try self.map.getOrPut(self.allocator, key_copy);
+    if (!gop.found_existing) {
+        gop.key_ptr.* = key_copy;
     }
-    self.map.deinit();
+    gop.value_ptr.* = entry;
 }
 
-pub fn put(self: *Self, key: []const u8, value: []const u8) !void {
-    if (self.map.fetchOrderedRemove(key)) |entry| {
-        self.allocator.free(entry.key);
-        self.allocator.free(entry.value);
+pub fn get(self: *KVStore, key: []const u8) ?[]const u8 {
+    if (self.map.getPtr(key)) |entry| {
+        return entry.value;
     }
-    const key_copy = try self.allocator.dupe(u8, key);
-    const value_copy = try self.allocator.dupe(u8, value);
-
-    self.map.put(key_copy, value_copy) catch {
-        self.allocator.free(key_copy);
-        self.allocator.free(value_copy);
-    };
+    return null;
 }
 
-pub fn get(self: *Self, key: []const u8) ?[]const u8 {
-    return self.map.get(key);
-}
-
-pub fn contains(self: *Self, key: []const u8) bool {
+pub fn contains(self: *KVStore, key: []const u8) bool {
     return self.map.contains(key);
 }
-pub fn count(self: *Self) usize {
+pub fn count(self: *KVStore) usize {
     return self.map.count();
 }
 
 pub fn delete(self: *KVStore, key: []const u8) bool {
-    if (self.map.fetchOrderedRemove(key)) |entry| {
-        self.allocator.free(entry.key);
-        self.allocator.free(entry.value);
+    const removed = self.map.remove(key);
+    if (removed) {
         return true;
     }
     return false;
@@ -61,11 +76,11 @@ pub fn saveToFile(self: *KVStore, path: []const u8) !void {
 
     var it = self.map.iterator();
     while (it.next()) |entry| {
-        const key_len_buf = Self.toByteSize(entry.key_ptr.len);
+        const key_len_buf = KVStore.toByteSize(entry.key_ptr.*.len);
         try file.writeAll(key_len_buf[0..]);
         try file.writeAll(entry.key_ptr.*);
 
-        const val_len_buf = Self.toByteSize(entry.value_ptr.len);
+        const val_len_buf = KVStore.toByteSize(entry.value_ptr.*.len);
         try file.writeAll(val_len_buf[0..]);
         try file.writeAll(entry.value_ptr.*);
     }
@@ -89,7 +104,7 @@ pub fn loadFromFile(self: *KVStore, path: []const u8) !void {
             break;
         } // EOF
 
-        const key_len = Self.getSize(len_buf);
+        const key_len = KVStore.getSize(len_buf);
 
         var key_buf = try self.allocator.alloc(u8, key_len);
         defer self.allocator.free(key_buf);
@@ -97,7 +112,7 @@ pub fn loadFromFile(self: *KVStore, path: []const u8) !void {
         _ = try file.readAll(key_buf[0..key_len]);
         _ = try file.readAll(len_buf[0..4]);
 
-        const val_len = Self.getSize(len_buf);
+        const val_len = KVStore.getSize(len_buf);
         var val_buf = try self.allocator.alloc(u8, val_len);
 
         defer self.allocator.free(val_buf);

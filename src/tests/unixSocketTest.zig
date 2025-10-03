@@ -17,7 +17,7 @@ test "unix socket server responds" {
     w.writeAll("PING") catch unreachable;
     w.flush() catch unreachable;
 
-    const response = readResponse(conn, &buf);
+    const response = readResponse(conn, &buf) catch unreachable;
     try std.testing.expect(std.mem.indexOf(u8, response, "PONG") != null);
 }
 
@@ -30,7 +30,7 @@ test "stop server" {
     const w = &writer.interface;
     w.writeAll("SHUTDOWN") catch unreachable;
     w.flush() catch unreachable;
-    const response = readResponse(conn, &buf);
+    const response = readResponse(conn, &buf) catch unreachable;
     try std.testing.expect(std.mem.indexOf(u8, response, "===SHUTDOWN===") != null);
     defer server_thread.?.join();
 }
@@ -48,21 +48,19 @@ fn startServer() void {
     const allocator = gpa.allocator();
     var store = KVStore.init(allocator);
 
-    unixSocket.startServer(&store, socket_path, allocator, &stop_server) catch |err| {
+    unixSocket.startServer(&store, socket_path, &stop_server) catch |err| {
         std.debug.print("Server error: {}\n", .{err});
     };
 }
 
-pub fn readResponse(conn: std.net.Stream, buf: []u8) []u8 {
-    var reader = conn.reader(&.{});
-    const r = reader.interface();
+pub fn readResponse(conn: std.net.Stream, buf: []u8) ![]u8 {
+    const bytes_read = try conn.read(buf);
+    return buf[0..bytes_read];
+}
 
-    var pos: usize = 0;
-    while (pos < buf.len) {
-        const n = r.readSliceShort(buf[pos..]) catch 0;
-        if (n == 0) break;
-        pos += n;
-    }
-
-    return buf[0..pos];
+// Simple check for Redis protocol completeness
+fn isCompleteRedisResponse(data: []const u8) bool {
+    if (data.len == 0) return false;
+    // Very basic check - in reality, parse Redis protocol properly
+    return data[data.len - 1] == '\n';
 }
