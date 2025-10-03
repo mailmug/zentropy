@@ -9,7 +9,7 @@ pub fn main() !void {
     var store = KVStore.init(allocator);
     defer store.deinit();
 
-    // const socket_path = "/tmp/zentropy.sock";
+    const socket_path = "/tmp/zentropy.sock";
 
     var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
@@ -17,11 +17,11 @@ pub fn main() !void {
     var tcp_thread = try std.Thread.spawn(.{}, tcp.startServer, .{ &store, &stop_server });
 
     // Start Unix socket server in main thread (or another thread)
-    // var unix_thread = try std.Thread.spawn(.{}, unixSocket.startServer, .{ &store, socket_path, allocator, &stop_server });
+    var unix_thread = try std.Thread.spawn(.{}, unixSocket.startServer, .{ &store, socket_path, &stop_server });
 
     // Wait for both servers (they will likely run forever)
     tcp_thread.join();
-    // unix_thread.join();
+    unix_thread.join();
 }
 
 fn startUnixSocketServer() void {}

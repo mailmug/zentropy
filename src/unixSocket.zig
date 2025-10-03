@@ -87,20 +87,12 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
                     // probably closed on the other side
                     closed = true;
                 } else {
-                    // _ = try posix.write(polled.fd, "oo\r\n");
-
                     const msg = buf[0..read];
                     const result = try handleConnection(polled.fd, store, msg);
                     if (std.mem.eql(u8, result, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
-                        // shutdown.send("unix_socket") catch {};
+                        shutdown.send("unix_socket") catch {};
                     }
-                    // std.debug.print("[{d}] got: {s}\n", .{ polled.fd, msg });
-                    // const response = "OK\r\n";
-                    // _ = posix.write(polled.fd, response) catch |err| {
-                    //     std.debug.print("write error: {s}\n", .{@errorName(err)});
-                    //     closed = true;
-                    // };
                 }
             }
 
