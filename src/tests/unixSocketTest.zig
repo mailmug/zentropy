@@ -47,6 +47,7 @@ fn startServer() void {
 
     const allocator = gpa.allocator();
     var store = KVStore.init(allocator);
+    defer store.deinit();
 
     unixSocket.startServer(&store, socket_path, &stop_server) catch |err| {
         std.debug.print("Server error: {}\n", .{err});

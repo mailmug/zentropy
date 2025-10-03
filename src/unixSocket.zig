@@ -13,101 +13,117 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
     const address = try std.net.Address.initUnix(unix_path);
 
     // Create non-blocking socket manually
-    const listener_fd = try posix.socket(posix.AF.UNIX, posix.SOCK.STREAM | posix.SOCK.NONBLOCK, 0);
-    defer posix.close(listener_fd);
+    const listener = try posix.socket(posix.AF.UNIX, posix.SOCK.STREAM | posix.SOCK.NONBLOCK, 0);
+    defer posix.close(listener);
 
     // Bind to address
-    try posix.bind(listener_fd, &address.any, address.getOsSockLen());
-    try posix.listen(listener_fd, 128);
+    try posix.bind(listener, &address.any, address.getOsSockLen());
+    try posix.listen(listener, 128);
 
-    // Set up polling
     var polls: [4096]posix.pollfd = undefined;
     polls[0] = .{
-        .fd = listener_fd,
+        .fd = listener,
         .events = posix.POLL.IN,
         .revents = 0,
     };
     var poll_count: usize = 1;
 
     while (!stop_server.load(.seq_cst)) {
+        // polls is the total number of connections we can monitor, but
+        // polls[0..poll_count] is the actual number of clients + the listening
+        // socket that are currently connected
         var active = polls[0..poll_count];
 
-        // Poll with 100ms timeout to check stop_server periodically
-        _ = posix.poll(active, 100) catch |err| {
-            if (err == error.Interrupted) continue;
-            return err;
-        };
+        // 2nd argument is the timeout, -1 is infinity
+        _ = try posix.poll(active, -1);
 
-        // Handle new connections
+        // Active[0] is _always_ the listening socket. When this socket is ready
+        // we can accept. Putting it outside the following while loop means that
+        // we don't have to check if if this is the listening socket on each
+        // iteration
         if (active[0].revents != 0) {
-            while (true) {
-                const client_fd = posix.accept(listener_fd, null, null, posix.SOCK.NONBLOCK) catch |err| switch (err) {
-                    error.WouldBlock => break, // No more pending connections
-                    else => |e| return e,
-                };
+            // The listening socket is ready, accept!
+            // Notice that we pass SOCK.NONBLOCK to accept, placing the new client
+            // socket in non-blocking mode. Also, for now, for simplicity,
+            // we're not capturing the client address (the two null arguments).
+            const socket = try posix.accept(listener, null, null, posix.SOCK.NONBLOCK);
 
-                if (poll_count < polls.len) {
-                    polls[poll_count] = .{
-                        .fd = client_fd,
-                        .events = posix.POLL.IN,
-                        .revents = 0,
-                    };
-                    poll_count += 1;
-                } else {
-                    posix.close(client_fd);
-                }
-            }
+            // Add this new client socket to our polls array for monitoring
+            polls[poll_count] = .{
+                .fd = socket,
+
+                // This will be SET by posix.poll to tell us what event is ready
+                // (or it will stay 0 if this socket isn't ready)
+                .revents = 0,
+
+                // We want to be notified about the POLL.IN event
+                // (i.e. can read without blocking)
+                .events = posix.POLL.IN,
+            };
+
+            // increment the number of active connections we're monitoring
+            // this can overflow our 4096 polls array. TODO: fix that!
+            poll_count += 1;
         }
 
-        // Handle client connections
         var i: usize = 1;
-        while (i < poll_count) {
-            const polled = &active[i];
+        while (i < active.len) {
+            const polled = active[i];
+
+            const revents = polled.revents;
+            if (revents == 0) {
+                // This socket isn't ready, go to the next one
+                i += 1;
+                continue;
+            }
+
             var closed = false;
 
-            if (polled.revents & posix.POLL.IN != 0) {
-                var buf: [1024]u8 = undefined;
-                const n = posix.read(polled.fd, &buf) catch 0;
-
-                if (n == 0) {
+            // the socket is ready to be read
+            if (revents & posix.POLL.IN == posix.POLL.IN) {
+                var buf: [4096]u8 = undefined;
+                const read = posix.read(polled.fd, &buf) catch 0;
+                if (read == 0) {
+                    // probably closed on the other side
                     closed = true;
                 } else {
-                    const msg = buf[0..n];
+                    // _ = try posix.write(polled.fd, "oo\r\n");
 
-                    // Create a stream from the file descriptor for handleConnection
-                    const result = handleConnection(polled.fd, store, msg) catch {
-                        closed = true;
-                        continue;
-                    };
-
+                    const msg = buf[0..read];
+                    const result = try handleConnection(polled.fd, store, msg);
                     if (std.mem.eql(u8, result, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
+                        // shutdown.send("unix_socket") catch {};
                     }
+                    // std.debug.print("[{d}] got: {s}\n", .{ polled.fd, msg });
+                    // const response = "OK\r\n";
+                    // _ = posix.write(polled.fd, response) catch |err| {
+                    //     std.debug.print("write error: {s}\n", .{@errorName(err)});
+                    //     closed = true;
+                    // };
                 }
             }
 
-            // Handle errors and hangup
-            if (closed or (polled.revents & (posix.POLL.HUP | posix.POLL.ERR) != 0)) {
+            // either the read failed, or we're being notified through poll
+            // that the socket is closed
+            if (closed or (revents & posix.POLL.HUP != 0)) {
                 posix.close(polled.fd);
 
-                // Remove from polls array
-                const last_index = poll_count - 1;
-                if (i < last_index) {
-                    polls[i] = polls[last_index];
-                }
+                // We use a simple trick to remove it: we swap it with the last
+                // item in our array, then "shrink" our array by 1
+                const last_index = active.len - 1;
+                active[i] = active[last_index];
+                active = active[0..last_index];
                 poll_count -= 1;
-                // Don't increment i since we swapped
+
+                // don't increment `i` because we swapped out the removed item
+                // and shrank the array
             } else {
+                // not closed, go to the next socket
                 i += 1;
             }
         }
     }
-
-    // Cleanup
-    for (polls[1..poll_count]) |polled| {
-        posix.close(polled.fd);
-    }
-    fs.cwd().deleteFile(unix_path) catch {};
 }
 
 pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
