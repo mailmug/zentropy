@@ -16,6 +16,8 @@ zig-out/bin/*
 build/
 dist/
 out/
+venv/
+venv/*
 
 # Zig installed packages
 zig-packages/
