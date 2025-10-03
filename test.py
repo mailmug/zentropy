@@ -5,7 +5,7 @@ import os
 
 HOST = "127.0.0.1"
 PORT = 6379     # Redis (6379) or Zentropy (6383)
-# PORT = 6383     # Redis (6379) or Zentropy (6383)
+PORT = 6383     # Redis (6379) or Zentropy (6383)
 REQUESTS = 15000  # Total SET+GET requests (so 2x operations)
 print("port : ", PORT)
 def send_command(sock, cmd):
