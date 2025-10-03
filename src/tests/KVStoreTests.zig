@@ -43,8 +43,8 @@ test "KVStore save/load persistence" {
     try store.saveToFile("data.bin");
 
     // Clear the map
-    store.deinit();
-    store.map = std.StringArrayHashMap([]const u8).init(allocator);
+    // store.deinit();
+    store.map.clearAndFree(allocator);
 
     // Confirm map is empty
     try std.testing.expect(store.get("apple") == null);
@@ -54,7 +54,6 @@ test "KVStore save/load persistence" {
     // Load from file
     try store.loadFromFile("data.bin");
 
-    // Verify all keys/values are restored
     const apple = store.get("apple") orelse "";
     const banana = store.get("banana") orelse "";
     const grape = store.get("grape") orelse "";

@@ -76,13 +76,17 @@ pub fn saveToFile(self: *KVStore, path: []const u8) !void {
 
     var it = self.map.iterator();
     while (it.next()) |entry| {
-        const key_len_buf = KVStore.toByteSize(entry.key_ptr.*.len);
+        // key
+        const key = entry.key_ptr.*;
+        const key_len_buf = KVStore.toByteSize(key.len);
         try file.writeAll(key_len_buf[0..]);
-        try file.writeAll(entry.key_ptr.*);
+        try file.writeAll(key);
 
-        const val_len_buf = KVStore.toByteSize(entry.value_ptr.*.len);
+        // value
+        const val = entry.value_ptr.value;
+        const val_len_buf = KVStore.toByteSize(val.len);
         try file.writeAll(val_len_buf[0..]);
-        try file.writeAll(entry.value_ptr.*);
+        try file.writeAll(val);
     }
 }
 
@@ -91,37 +95,24 @@ pub fn loadFromFile(self: *KVStore, path: []const u8) !void {
     var file = try fs.cwd().openFile(path, .{});
     defer file.close();
 
-    // Clear existing map
-    self.deinit();
-    self.map = std.StringArrayHashMap([]const u8).init(self.allocator);
-
     var len_buf: [4]u8 = undefined;
 
     while (true) {
-        const bytes_read = file.read(len_buf[0..4]) catch 0;
-
-        if (bytes_read != 4) {
-            break;
-        } // EOF
+        const bytes_read = try file.read(len_buf[0..]);
+        if (bytes_read == 0) break; // EOF
+        if (bytes_read != 4) return error.InvalidFormat;
 
         const key_len = KVStore.getSize(len_buf);
+        const key_buf = try self.arena.allocator().alloc(u8, key_len);
+        _ = try file.readAll(key_buf);
 
-        var key_buf = try self.allocator.alloc(u8, key_len);
-        defer self.allocator.free(key_buf);
-
-        _ = try file.readAll(key_buf[0..key_len]);
-        _ = try file.readAll(len_buf[0..4]);
-
+        _ = try file.readAll(len_buf[0..]);
         const val_len = KVStore.getSize(len_buf);
-        var val_buf = try self.allocator.alloc(u8, val_len);
+        const val_buf = try self.arena.allocator().alloc(u8, val_len);
+        _ = try file.readAll(val_buf);
 
-        defer self.allocator.free(val_buf);
-        _ = try file.readAll(val_buf[0..val_len]);
-
-        try self.put(
-            key_buf,
-            val_buf,
-        );
+        // Store slices owned by arena
+        try self.set(key_buf, val_buf);
     }
 }
 
