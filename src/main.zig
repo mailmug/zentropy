@@ -5,9 +5,16 @@ const unixSocket = @import("unixSocket.zig");
 const config = @import("config.zig");
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
-    // const allocator = gpa.allocator();
-    // defer _ = gpa.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const check = gpa.deinit();
+        switch (check) {
+            .ok => {},
+            .leak => @panic("Memory leak detected!"),
+        }
+    }
+    const allocator = gpa.allocator();
+    // const allocator = std.heap.page_allocator;
     var store = KVStore.init(allocator);
     defer store.deinit();
 

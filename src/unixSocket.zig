@@ -98,7 +98,8 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
 
             // either the read failed, or we're being notified through poll
             // that the socket is closed
-            if (closed or (revents & posix.POLL.HUP != 0)) {
+
+            if (closed or (revents & posix.POLL.HUP != 0) or (revents & posix.POLL.ERR != 0)) {
                 posix.close(polled.fd);
 
                 // We use a simple trick to remove it: we swap it with the last

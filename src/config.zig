@@ -3,11 +3,13 @@ const Config = @This();
 
 bind_address: []const u8,
 port: u16,
+password: ?[]const u8,
 
 pub fn init() !Config {
     return Config{
         .bind_address = "127.0.0.1",
         .port = 6383,
+        .password = null,
     };
 }
 
@@ -84,6 +86,8 @@ pub fn loadFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Config
                     std.log.warn("Invalid port value '{s}' on line {d}. Using default port {d}.", .{ value, line_num, config.port });
                     continue;
                 };
+            } else if (std.mem.eql(u8, key, "password") and !std.mem.eql(u8, value, "null")) {
+                config.password = try allocator.dupe(u8, value);
             }
         }
     }
@@ -94,5 +98,8 @@ pub fn loadFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Config
 pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
     if (!std.mem.eql(u8, self.bind_address, "127.0.0.1")) {
         allocator.free(self.bind_address);
+    }
+    if (self.password) |pwd| {
+        allocator.free(pwd);
     }
 }

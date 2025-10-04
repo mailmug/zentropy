@@ -9,6 +9,10 @@ const commands = @import("commands.zig");
 const Config = @import("config.zig");
 
 pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_config: *const Config) !void {
+    const gpa = std.heap.page_allocator;
+    var auth_map = std.AutoHashMap(posix.fd_t, bool).init(gpa);
+    defer auth_map.deinit();
+
     const address = std.net.Address.parseIp(app_config.bind_address, app_config.port) catch return;
 
     const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
@@ -93,7 +97,7 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
                     closed = true;
                 } else {
                     const msg = buf[0..read];
-                    const result = try handleConnection(polled.fd, store, msg);
+                    const result = try handleConnection(polled.fd, store, msg, app_config, &auth_map);
                     if (std.mem.eql(u8, result, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("unix_socket") catch {};
@@ -103,8 +107,9 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
 
             // either the read failed, or we're being notified through poll
             // that the socket is closed
-            if (closed or (revents & posix.POLL.HUP != 0)) {
+            if (closed or (revents & posix.POLL.HUP != 0) or (revents & posix.POLL.ERR != 0)) {
                 posix.close(polled.fd);
+                // _ = auth_map.remove(polled.fd);
 
                 // We use a simple trick to remove it: we swap it with the last
                 // item in our array, then "shrink" our array by 1
@@ -123,9 +128,37 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
     }
 }
 
-pub fn windowsHandleConnection(conn: std.net.Server.Connection, store: *KVStore, msg: []u8) ![]const u8 {
-    return commands.parseCmd(conn, store, msg);
-}
-pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
+pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: *const Config, auth_map: *std.AutoHashMap(posix.fd_t, bool)) ![]const u8 {
+    if (std.mem.startsWith(u8, msg, "AUTH ")) {
+        const pass = trimCrlf(msg[5..]);
+        if (app_config.password != null and std.mem.eql(u8, pass, app_config.password.?)) {
+            try auth_map.put(fd, true);
+            _ = try posix.write(fd, "OK\r\n");
+            return "";
+        } else {
+            _ = try posix.write(fd, "ERR invalid password\r\n");
+            return "";
+        }
+    }
+
+    if (app_config.password != null) {
+        if (auth_map.get(fd)) |is_authed| {
+            if (!is_authed) {
+                _ = try posix.write(fd, "NOAUTH Authentication required\r\n");
+                return "";
+            }
+        } else {
+            _ = try posix.write(fd, "NOAUTH Authentication required\r\n");
+            return "";
+        }
+    }
     return commands.parseCmd(fd, store, msg);
+}
+
+fn trimCrlf(s: []const u8) []const u8 {
+    var end = s.len;
+    while (end > 0 and (s[end - 1] == '\r' or s[end - 1] == '\n')) {
+        end -= 1;
+    }
+    return s[0..end];
 }
