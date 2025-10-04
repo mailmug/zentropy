@@ -70,4 +70,3 @@ echo "PING" | nc -U /tmp/zentropy.sock
 # -> +PONG
 ```
 
-# Zentropy
