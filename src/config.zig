@@ -75,7 +75,7 @@ pub fn loadFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Config
         }
 
         // Parse key-value pairs
-        if (std.mem.indexOf(u8, trimmed_line, "=")) |eq_index| {
+        if (std.mem.indexOf(u8, trimmed_line, " ")) |eq_index| {
             const key = std.mem.trim(u8, trimmed_line[0..eq_index], " \t");
             const value = std.mem.trim(u8, trimmed_line[eq_index + 1 ..], " \t\"'");
 

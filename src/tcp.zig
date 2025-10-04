@@ -109,7 +109,7 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
             // that the socket is closed
             if (closed or (revents & posix.POLL.HUP != 0) or (revents & posix.POLL.ERR != 0)) {
                 posix.close(polled.fd);
-                // _ = auth_map.remove(polled.fd);
+                _ = auth_map.remove(polled.fd);
 
                 // We use a simple trick to remove it: we swap it with the last
                 // item in our array, then "shrink" our array by 1
@@ -134,7 +134,9 @@ pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: 
         if (app_config.password != null and std.mem.eql(u8, pass, app_config.password.?)) {
             try auth_map.put(fd, true);
             _ = try posix.write(fd, "OK\r\n");
-            return "";
+            const authLen = pass.len + 7;
+            const msgData = trimCrlf(msg[authLen..]);
+            return commands.parseCmd(fd, store, msgData);
         } else {
             _ = try posix.write(fd, "ERR invalid password\r\n");
             return "";
@@ -155,10 +157,8 @@ pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: 
     return commands.parseCmd(fd, store, msg);
 }
 
-fn trimCrlf(s: []const u8) []const u8 {
-    var end = s.len;
-    while (end > 0 and (s[end - 1] == '\r' or s[end - 1] == '\n')) {
-        end -= 1;
-    }
+fn trimCrlf(s: []u8) []u8 {
+    var end: usize = 0;
+    while (end < s.len and s[end] != '\r' and s[end] != '\n') : (end += 1) {}
     return s[0..end];
 }
