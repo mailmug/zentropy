@@ -3,6 +3,7 @@ const tcp = @import("../tcp.zig");
 const KVStore = @import("../KVStore.zig");
 var stop_server: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 var server_thread: ?std.Thread = null;
+const config = @import("../config.zig");
 
 test "tcp server responds" {
 
@@ -120,7 +121,7 @@ test "stop server" {
     defer server_thread.?.join();
 }
 
-fn startServer() void {
+fn startServer() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const check = gpa.deinit();
@@ -133,8 +134,9 @@ fn startServer() void {
     const allocator = gpa.allocator();
     var store = KVStore.init(allocator);
     defer store.deinit();
-
-    tcp.startServer(&store, &stop_server) catch |err| {
+    var app_config = try config.load(allocator);
+    defer app_config.deinit(allocator);
+    tcp.startServer(&store, &stop_server, &app_config) catch |err| {
         std.debug.print("Server error: {}\n", .{err});
     };
 }
