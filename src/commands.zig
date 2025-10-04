@@ -55,9 +55,11 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
         }
     } else if (std.mem.eql(u8, cmd, "EXISTS")) {
         if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            const key_str = std.mem.trim(u8, key, "\r\n");
-            const exists = store.contains(key_str);
+            // const key = parts[1];
+            // const key_str = std.mem.trim(u8, key, "\r\n");
+            // const exists = store.contains(key_str);
+            const exists = true;
+
             if (exists) {
                 _ = try posix.write(fd, "1\r\n");
             } else {
