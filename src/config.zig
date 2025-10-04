@@ -77,7 +77,7 @@ pub fn loadFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Config
             const key = std.mem.trim(u8, trimmed_line[0..eq_index], " \t");
             const value = std.mem.trim(u8, trimmed_line[eq_index + 1 ..], " \t\"'");
 
-            if (std.mem.eql(u8, key, "bind_address")) {
+            if (std.mem.eql(u8, key, "bind_address") and !std.mem.eql(u8, value, "127.0.0.1")) {
                 config.bind_address = try allocator.dupe(u8, value);
             } else if (std.mem.eql(u8, key, "port")) {
                 config.port = std.fmt.parseInt(u16, value, 10) catch {

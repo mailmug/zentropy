@@ -9,7 +9,7 @@ const commands = @import("commands.zig");
 const Config = @import("config.zig");
 
 pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_config: *const Config) !void {
-    const address = try std.net.Address.parseIp(app_config.bind_address, app_config.port);
+    const address = std.net.Address.parseIp(app_config.bind_address, app_config.port) catch return;
 
     const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
     const protocol = posix.IPPROTO.TCP;
