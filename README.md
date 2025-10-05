@@ -19,7 +19,7 @@ A high-performance, lightweight key-value store server written in Zig, supportin
 | Operation   | Redis    | Zentropy | Performance Delta |
 |-------------|----------|----------|-------------------|
 | Write       | 0.0075s  | 0.0046s  | 🟢 Zentropy 1.61x faster |
-| Read        | 0.0000s  | 0.0000s  | 🔴 Redis 1.19x faster |
+| Read        | 0.0000s  | 0.0000s  | 🟢 Same Result |
 | Key-Value   | 0.0078s  | 0.0021s  | 🟢 Zentropy 3.79x faster |
 
 ### Data Size: 1,000 records
