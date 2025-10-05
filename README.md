@@ -1,4 +1,4 @@
-<p align="center"><a href="#logo"><img src="https://raw.githubusercontent.com/mailmug/zentropy/main/logo.png" width="400" alt="Zentropy Logo"></a></p>
+<p align="center"><a href="#logo"><img src="https://raw.githubusercontent.com/mailmug/zentropy/main/logo.png" width="200" alt="Zentropy Logo"></a></p>
 
 # Zentropy
 A high-performance, lightweight key-value store server written in Zig, supporting both TCP and Unix socket interfaces.
