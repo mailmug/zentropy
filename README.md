@@ -1,4 +1,10 @@
 <p align="center"><a href="#logo"><img src="https://raw.githubusercontent.com/mailmug/zentropy/main/logo.png" width="200" alt="Zentropy Logo"></a></p>
+<p align="center">
+    <a href="https://github.com/mailmug/zentropy/releases/latest"><img src="https://badgen.net/github/release/mailmug/zentropy" /></a>
+    <a href="LICENSE"><img src="https://badgen.net/github/license/mailmug/zentropy" /></a>
+    <a href="https://github.com/mailmug/zentropy"><img src="https://badgen.net/badge/project/zentropy/blue" /></a>
+</p>
+
 
 A high-performance, lightweight key-value store server written in Zig, supporting both TCP and Unix socket interfaces.
 
