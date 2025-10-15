@@ -3,19 +3,19 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const mod = b.addModule("zentropty", .{
+    const mod = b.addModule("zentropy", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
 
     const exe = b.addExecutable(.{
-        .name = "zentropty",
+        .name = "zentropy",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zentropty", .module = mod },
+                .{ .name = "zentropy", .module = mod },
             },
         }),
     });
