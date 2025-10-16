@@ -19,7 +19,7 @@ A high-performance, lightweight key-value store server written in Zig, supportin
 
 - **Memory Safe:** No garbage collector, manual memory management
 
-Zig version: 0.15.1+
+Zig Build version: 0.15.1+
 
 ## PERFORMANCE SUMMARY
 
@@ -78,4 +78,3 @@ GET apple
 echo "PING" | nc -U /tmp/zentropy.sock
 # -> +PONG
 ```
-
