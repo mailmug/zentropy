@@ -1,17 +1,9 @@
 const std = @import("std");
 const Config = @This();
 
-bind_address: []const u8,
-port: u16,
-password: ?[]const u8,
-
-pub fn init() !Config {
-    return Config{
-        .bind_address = "127.0.0.1",
-        .port = 6383,
-        .password = null,
-    };
-}
+bind_address: []const u8 = "127.0.0.1",
+port: u16 = 6383,
+password: ?[]const u8 = null,
 
 pub fn load(allocator: std.mem.Allocator) !Config {
     const possible_paths = &[_][]const u8{
@@ -39,7 +31,7 @@ pub fn load(allocator: std.mem.Allocator) !Config {
     }
 
     std.log.warn("No configuration file found. Using defaults.", .{});
-    return init();
+    return .{};
 }
 
 fn fileExists(file_path: []const u8) bool {
@@ -48,7 +40,7 @@ fn fileExists(file_path: []const u8) bool {
 }
 
 pub fn loadFromFile(allocator: std.mem.Allocator, file_path: []const u8) !Config {
-    var config = try init();
+    var config = Config{};
 
     const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
         std.log.warn("Could not open config file '{s}': {s}. Using defaults.", .{ file_path, @errorName(err) });
