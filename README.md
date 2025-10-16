@@ -19,7 +19,7 @@ A high-performance, lightweight key-value store server written in Zig, supportin
 
 - **Memory Safe:** No garbage collector, manual memory management
 
-Zig Build version: 0.15.1+
+Zig version: 0.15.1+
 
 ## PERFORMANCE SUMMARY
 
