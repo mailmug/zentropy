@@ -91,7 +91,7 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
                     const result = try handleConnection(polled.fd, store, msg);
                     if (std.mem.eql(u8, result, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
-                        shutdown.send("unix_socket") catch {};
+                        shutdown.send("tcp") catch {};
                     }
                 }
             }
