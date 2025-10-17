@@ -1,6 +1,7 @@
 const std = @import("std");
 const net = std.net;
 const mem = std.mem;
+const builtin = @import("builtin");
 const Io = std.Io;
 const Reader = Io.Reader;
 const Stream = net.Stream;
@@ -25,12 +26,20 @@ pub const Client = struct {
             .in = try .parse(config.bind_address, config.port),
         });
 
-        var reader = stream.reader(&[_]u8{});
-        try stream.writeAll("PING");
-        const pong = try reader.file_reader.interface.takeArray(4);
+        //check for connectivity only in debug and release safe mod
+        switch (builtin.mode) {
+            .Debug, .ReleaseSafe => {
+                var buf: [32]u8 = undefined;
+                var reader = stream.reader(&buf);
+                try stream.writeAll("PING");
+                const expected_result = "PONG\r\n";
+                const pong = try reader.file_reader.interface.takeArray(expected_result.len);
 
-        if (!mem.eql(u8, pong, "PONG")) {
-            return error.BadPingResponse;
+                if (!mem.eql(u8, pong, expected_result)) {
+                    return error.BadPingResponse;
+                }
+            },
+            else => {},
         }
 
         return Client{
@@ -43,8 +52,27 @@ pub const Client = struct {
         self.stream.close();
     }
 
-    pub fn set(self: *Client, key: []const u8, value: []const u8) !void {
-        _ = .{ self, key, value };
+    const SetError = error{
+        ServerError,
+    } ||
+        Io.Writer.Error ||
+        Io.Reader.Error;
+
+    pub fn set(self: *Client, key: []const u8, value: []const u8) SetError!void {
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("SET {s} {s}", .{ key, value });
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(&buf);
+        const expected_result = "+OK\r\n";
+        const result = try reader.file_reader.interface.takeByte(); // reading only 1 byte for micro boost in performance
+        try reader.file_reader.interface.discardAll(expected_result.len - 1); //discarding rest of the result
+
+        if (result != '+') {
+            return error.ServerError;
+        }
     }
     /// returns bytes read
     pub fn get(self: *Client, key: []const u8, out: []u8) !?usize {
