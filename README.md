@@ -78,3 +78,8 @@ GET apple
 echo "PING" | nc -U /tmp/zentropy.sock
 # -> +PONG
 ```
+
+## Zentropy Roadmap
+[Please read it](https://github.com/mailmug/zentropy/issues/9)
+Zentropy is open-source! Contributions, suggestions, and bug reports are welcome.
+Feel free to fork the repo, submit PRs, or open issues.
