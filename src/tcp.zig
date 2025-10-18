@@ -133,24 +133,21 @@ pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: 
         const pass = trimCrlf(msg[5..]);
         if (app_config.password != null and std.mem.eql(u8, pass, app_config.password.?)) {
             try auth_map.put(fd, true);
-            _ = try posix.write(fd, "OK\r\n");
-            const authLen = pass.len + 7;
-            const msgData = trimCrlf(msg[authLen..]);
-            return commands.parseCmd(fd, store, msgData);
+            _ = try posix.write(fd, "+OK\r\n");
         } else {
-            _ = try posix.write(fd, "ERR invalid password\r\n");
-            return "";
+            _ = try posix.write(fd, "-ERR invalid password\r\n");
         }
+        return "";
     }
 
     if (app_config.password != null) {
         if (auth_map.get(fd)) |is_authed| {
             if (!is_authed) {
-                _ = try posix.write(fd, "NOAUTH Authentication required\r\n");
+                _ = try posix.write(fd, "-NOAUTH Authentication required\r\n");
                 return "";
             }
         } else {
-            _ = try posix.write(fd, "NOAUTH Authentication required\r\n");
+            _ = try posix.write(fd, "-NOAUTH Authentication required\r\n");
             return "";
         }
     }

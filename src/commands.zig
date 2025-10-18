@@ -19,7 +19,7 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
 
     if (std.mem.eql(u8, cmd, "PING")) {
         if (validCheckCmdLen(parts.len, 1, fd)) {
-            _ = try posix.write(fd, "PONG\r\n");
+            _ = try posix.write(fd, "+PONG\r\n");
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "INFO")) {
