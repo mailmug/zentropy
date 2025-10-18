@@ -127,7 +127,7 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
                 break;
             }
         } else {
-            // Regular word
+            // Regular word - read until space or end
             while (i < len and !std.ascii.isWhitespace(msg[i])) i += 1;
             output[count] = msg[start..i];
             count += 1;
@@ -136,6 +136,7 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
 
     return output[0..count];
 }
+
 fn splitToSlice(msg: []const u8, delimiter: []const u8, output: []([]const u8)) []const []const u8 {
     var count: usize = 0;
     var iter = std.mem.splitSequence(u8, msg, delimiter);
