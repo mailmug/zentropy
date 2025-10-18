@@ -69,10 +69,10 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
         if (validCheckCmdLen(parts.len, 2, fd)) {
             const key = parts[1];
             if (store.delete(key)) {
-                _ = posix.write(fd, "+DELETED\r\n") catch {};
+                _ = posix.write(fd, "+OK\r\n") catch {};
                 return "";
             }
-            _ = posix.write(fd, "NOT DELETED\r\n") catch {};
+            _ = posix.write(fd, "-NOT DELETED\r\n") catch {};
             return "";
         }
     } else if (std.mem.eql(u8, cmd, "SHUTDOWN")) {
@@ -127,7 +127,7 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
                 break;
             }
         } else {
-            // Regular word - read until space or end
+            // Regular word
             while (i < len and !std.ascii.isWhitespace(msg[i])) i += 1;
             output[count] = msg[start..i];
             count += 1;
@@ -136,7 +136,6 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
 
     return output[0..count];
 }
-
 fn splitToSlice(msg: []const u8, delimiter: []const u8, output: []([]const u8)) []const []const u8 {
     var count: usize = 0;
     var iter = std.mem.splitSequence(u8, msg, delimiter);
