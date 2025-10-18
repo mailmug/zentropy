@@ -24,7 +24,7 @@ test "tcp server responds" {
     w.flush() catch unreachable;
 
     const response = readResponse(conn, &buf) catch unreachable;
-    try std.testing.expect(std.mem.indexOf(u8, response, "PONG") != null);
+    try std.testing.expect(std.mem.indexOf(u8, response, "+PONG") != null);
 }
 
 test "tcp server set data" {
