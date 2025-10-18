@@ -31,8 +31,8 @@ pub const Client = struct {
             .Debug, .ReleaseSafe => {
                 var buf: [32]u8 = undefined;
                 var reader = stream.reader(&buf);
-                try stream.writeAll("PING");
-                const expected_result = "PONG\r\n";
+                try stream.writeAll("PING"); //TODO replace with writer, writeAll is deprecated
+                const expected_result = "+PONG\r\n";
                 const pong = try reader.file_reader.interface.takeArray(expected_result.len);
 
                 if (!mem.eql(u8, pong, expected_result)) {
@@ -74,9 +74,10 @@ pub const Client = struct {
             return error.ServerError;
         }
     }
-    /// returns bytes read
-    pub fn get(self: *Client, key: []const u8, out: []u8) !?usize {
+    /// returns result slice pointing in `out`
+    pub fn get(self: *Client, key: []const u8, out: []u8) !?[]const u8 {
         _ = .{ self, key, out };
+        return null;
     }
 
     /// caller owns memory
@@ -99,8 +100,23 @@ pub const Client = struct {
         _ = .{ self, key };
     }
 
+    const ShutdownError = error{
+        BadResponse,
+    } || Io.Writer.Error || Io.Reader.Error;
+
     /// shuts down server
-    pub fn shutdown(self: *Client) !void {
-        _ = self;
+    pub fn shutdown(self: *Client) ShutdownError!void {
+        var buf: [32]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+        try writer.interface.writeAll("SHUTDOWN");
+        try writer.interface.flush();
+
+        const expected_result = "===SHUTDOWN===\r\n";
+
+        var reader = self.stream.reader(&buf);
+        const result = try reader.file_reader.interface.takeArray(expected_result.len);
+        if (!mem.eql(u8, expected_result, result)) {
+            return error.BadResponse;
+        }
     }
 };
