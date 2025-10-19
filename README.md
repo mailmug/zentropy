@@ -56,8 +56,37 @@ Zig Build version: 0.15.1+
 | Key-Value   | 0.0098s  | 0.0020s  | 🟢 Zentropy 4.82x faster |
 
 
-## TCP
+## 🧩 How to Install
 
+**Step 1:** Download the [release binary](https://github.com/mailmug/zentropy/releases/tag/v1.0.0)
+
+**Step 2:** Extract the ZIP file.
+
+**Step 3:** Copy the `zentropy.conf` file, edit the password, and place it in the same directory as the `zentropy` binary:
+
+```bash
+bind_address 127.0.0.1
+port 6383
+password pass@123
+```
+**Step 4:** Run the binary based on your CPU architecture:
+```bash
+./zentropy
+```
+
+✅ Tip: Once the server is running, you can test it using the [Python Client](https://pypi.org/project/zentropy-py/):
+```python
+from zentropy import Client
+
+client = Client(password="pass@123")
+print(client.ping())  # Should print: True
+```
+
+## Client Library
+1. [Python Client Library](https://pypi.org/project/zentropy-py/).
+
+
+## TCP
 
 # Connect using netcat
 ```bash
