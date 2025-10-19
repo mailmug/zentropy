@@ -76,8 +76,16 @@ pub const Client = struct {
     }
     /// returns result slice pointing in `out`
     pub fn get(self: *Client, key: []const u8, out: []u8) !?[]const u8 {
-        _ = .{ self, key, out };
-        return null;
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("GET {s}", .{key});
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(out);
+        _ = &reader;
+        //TODO
+        @compileError("todo");
     }
 
     /// caller owns memory
