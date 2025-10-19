@@ -84,7 +84,7 @@ print(client.ping())  # Should print: True
 
 ## Client Library
 1. [Python Client Library](https://pypi.org/project/zentropy-py/).
-
+2. [PHP Client Library](https://packagist.org/packages/mailmug/zentropy-php).
 
 ## TCP
 
