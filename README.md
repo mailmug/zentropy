@@ -99,6 +99,8 @@ SET apple red
 
 GET apple
 # -> red
+
+DELETE apple
 ```
 
 
