@@ -110,7 +110,7 @@ pub const Client = struct {
             try reader.file_reader.interface.discardAll(responses.none.len);
             return null;
         }
-        const slice = try reader.file_reader.interface.takeDelimiter('\r') orelse unreachable;
+        const slice = try reader.file_reader.interface.takeDelimiter('\r') orelse return null;
         try reader.file_reader.interface.discardAll(1); //discard "\n"
 
         return try gpa.dupe(u8, slice);
