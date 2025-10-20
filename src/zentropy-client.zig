@@ -12,6 +12,8 @@ const Config = @import("config.zig");
 pub const Client = struct {
     stream: net.Stream,
 
+    const buffer_size = 4096; // this affects responses max size
+
     const ConnectError = error{
         BadPingResponse,
     } ||
@@ -59,7 +61,7 @@ pub const Client = struct {
         Io.Reader.Error;
 
     pub fn set(self: *Client, key: []const u8, value: []const u8) SetError!void {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("SET \"{s}\" \"{s}\"", .{ key, value });
@@ -75,7 +77,7 @@ pub const Client = struct {
     }
     /// returns result slice pointing in `out`
     pub fn get(self: *Client, key: []const u8, out: []u8) !?[]u8 {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("GET \"{s}\"", .{key});
@@ -96,7 +98,7 @@ pub const Client = struct {
 
     /// caller owns memory
     pub fn getAlloc(self: *Client, gpa: Allocator, key: []const u8) !?[]u8 {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("GET \"{s}\"", .{key});
@@ -116,7 +118,7 @@ pub const Client = struct {
 
     /// returns comptime known size string
     pub fn getSized(self: *Client, key: []const u8, comptime size: comptime_int) !?[size]u8 {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("GET \"{s}\"", .{key});
@@ -140,7 +142,7 @@ pub const Client = struct {
 
     /// checks if key exists
     pub fn exists(self: *Client, key: []const u8) !bool {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("EXISTS \"{s}\"", .{key});
@@ -155,7 +157,7 @@ pub const Client = struct {
 
     /// deletes key, returns true if deleted
     pub fn delete(self: *Client, key: []const u8) !bool {
-        var buf: [4096]u8 = undefined;
+        var buf: [buffer_size]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
         try writer.interface.print("DELETE \"{s}\"", .{key});
