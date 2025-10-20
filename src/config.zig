@@ -12,6 +12,7 @@ pub fn load(allocator: std.mem.Allocator) !Config {
         "../zentropy.conf", // Parent directory
         "config/zentropy.conf", // config subdirectory
         "/etc/zentropy/zentropy.conf", // System config directory
+        "/opt/homebrew/etc/zentropy.conf",
     };
 
     const exe_dir = try std.fs.selfExeDirPathAlloc(allocator);
