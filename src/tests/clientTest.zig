@@ -97,6 +97,32 @@ test "exists" {
     try testing.expect(try client.exists("example2"));
 }
 
+test "delete" {
+    stop_server.store(false, .unordered);
+    const server = try Thread.spawn(.{}, startServer, .{});
+    defer server.join();
+
+    Thread.sleep(time.ns_per_ms * 200);
+
+    var client = try zentropy.Client.connect(.{});
+    defer {
+        client.shutdown() catch unreachable;
+        client.deinit();
+    }
+
+    try testing.expect(!try client.delete("example1"));
+    try testing.expect(!try client.delete("example2"));
+    try client.set("example1", "value");
+    try testing.expect(!try client.delete("example2"));
+    const val1 = try client.getAlloc(testing.allocator, "example1") orelse unreachable;
+    defer testing.allocator.free(val1);
+    try testing.expectEqualSlices(u8, "value", val1);
+    try testing.expect(try client.delete("example1"));
+    try testing.expect(!try client.delete("example1"));
+    const val2 = try client.getAlloc(testing.allocator, "example1");
+    try testing.expect(val2 == null);
+}
+
 fn startServer() !void {
     var store = KVStore.init(testing.allocator);
     defer store.deinit();

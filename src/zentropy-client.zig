@@ -66,9 +66,8 @@ pub const Client = struct {
         try writer.interface.flush();
 
         var reader = self.stream.reader(&buf);
-        const expected_result = "+OK\r\n";
         const result = try reader.file_reader.interface.takeByte(); // reading only 1 byte for micro boost in performance
-        try reader.file_reader.interface.discardAll(expected_result.len - 1); //discarding rest of the result
+        try reader.file_reader.interface.discardAll(responses.ok.len - 1); //discarding rest of the result
 
         if (result != '+') {
             return error.ServerError;
@@ -84,13 +83,13 @@ pub const Client = struct {
 
         var reader = self.stream.reader(out);
 
-        const peek = try reader.file_reader.interface.peek(4);
-        if (mem.eql(u8, peek, "NONE")) {
-            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
+        const peek = try reader.file_reader.interface.peek(responses.none.len);
+        if (mem.eql(u8, peek, responses.none)) {
+            try reader.file_reader.interface.discardAll(responses.none.len);
             return null;
         }
         const slice = try reader.file_reader.interface.takeDelimiter('\r');
-        try reader.file_reader.interface.discardAll(1);
+        try reader.file_reader.interface.discardAll(1); //discard "\n"
 
         return slice;
     }
@@ -104,13 +103,13 @@ pub const Client = struct {
         try writer.interface.flush();
 
         var reader = self.stream.reader(&buf);
-        const peek = try reader.file_reader.interface.peek(4);
-        if (mem.eql(u8, peek, "NONE")) {
-            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
+        const peek = try reader.file_reader.interface.peek(responses.none.len);
+        if (mem.eql(u8, peek, responses.none)) {
+            try reader.file_reader.interface.discardAll(responses.none.len);
             return null;
         }
         const slice = try reader.file_reader.interface.takeDelimiter('\r') orelse unreachable;
-        try reader.file_reader.interface.discardAll(1);
+        try reader.file_reader.interface.discardAll(1); //discard "\n"
 
         return try gpa.dupe(u8, slice);
     }
@@ -125,16 +124,16 @@ pub const Client = struct {
 
         var reader = self.stream.reader(&buf);
 
-        const peek = try reader.file_reader.interface.peek(4);
-        if (mem.eql(u8, peek, "NONE")) {
-            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
+        const peek = try reader.file_reader.interface.peek(responses.none.len);
+        if (mem.eql(u8, peek, responses.none)) {
+            try reader.file_reader.interface.discardAll(responses.none.len);
             return null;
         }
 
         const result = try reader.file_reader.interface.takeArray(size);
         var output: [result.len]u8 = undefined;
         output = result.*;
-        _ = try reader.file_reader.interface.discardShort(2);
+        _ = try reader.file_reader.interface.discardShort(2); //discard "\r\n"
 
         return output;
     }
@@ -149,14 +148,28 @@ pub const Client = struct {
 
         var reader = self.stream.reader(&buf);
         const exists_byte = try reader.file_reader.interface.takeByte();
-        try reader.file_reader.interface.discardAll(2);
+        try reader.file_reader.interface.discardAll(2); //discard "\r\n"
 
         return if (exists_byte == '1') true else false;
     }
 
-    /// deletes key, if key doesn't exists returns error.KeyNotFound
+    /// deletes key, returns true if deleted
     pub fn delete(self: *Client, key: []const u8) !bool {
-        _ = .{ self, key };
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("DELETE \"{s}\"", .{key});
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(&buf);
+
+        const peek = try reader.file_reader.interface.peek(responses.ok.len);
+        if (mem.eql(u8, peek, responses.ok)) {
+            try reader.file_reader.interface.discardAll(responses.ok.len);
+            return true;
+        }
+        try reader.file_reader.interface.discardAll(responses.not_deleted.len);
+        return false;
     }
 
     const ShutdownError = error{
@@ -178,4 +191,11 @@ pub const Client = struct {
             return error.BadResponse;
         }
     }
+};
+
+const responses = struct {
+    pub const shutdown = "===SHUTDOWN===\r\n";
+    pub const ok = "+OK\r\n";
+    pub const not_deleted = "-NOT DELETED\r\n";
+    pub const none = "NONE\r\n";
 };
