@@ -26,7 +26,7 @@ pub const Client = struct {
             .in = try .parse(config.bind_address, config.port),
         });
 
-        //check for connectivity only in debug and release safe mod
+        //check for connectivity only in debug and release safe mode
         switch (builtin.mode) {
             .Debug, .ReleaseSafe => {
                 var buf: [32]u8 = undefined;
@@ -62,7 +62,7 @@ pub const Client = struct {
         var buf: [4096]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
-        try writer.interface.print("SET {s} {s}", .{ key, value });
+        try writer.interface.print("SET \"{s}\" \"{s}\"", .{ key, value });
         try writer.interface.flush();
 
         var reader = self.stream.reader(&buf);
@@ -79,7 +79,7 @@ pub const Client = struct {
         var buf: [4096]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
-        try writer.interface.print("GET {s}", .{key});
+        try writer.interface.print("GET \"{s}\"", .{key});
         try writer.interface.flush();
 
         var reader = self.stream.reader(out);
@@ -95,7 +95,25 @@ pub const Client = struct {
 
     /// returns comptime known size string
     pub fn getSized(self: *Client, key: []const u8, comptime size: comptime_int) !?[size]u8 {
-        _ = .{ self, key, size };
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("GET \"{s}\"", .{key});
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(&buf);
+
+        const peek = try reader.file_reader.interface.peek(4);
+        if (mem.eql(u8, peek, "NONE")) {
+            return null;
+        }
+
+        const result = try reader.file_reader.interface.takeArray(size);
+        var output: [result.len]u8 = undefined;
+        output = result.*;
+        _ = try reader.file_reader.interface.discardShort(2);
+
+        return output;
     }
 
     /// checks if key exists
