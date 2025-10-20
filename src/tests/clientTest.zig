@@ -13,21 +13,21 @@ test "connect" {
     stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
 
-    Thread.sleep(time.ns_per_ms * 1000);
+    Thread.sleep(time.ns_per_ms * 200);
 
     var client = try zentropy.Client.connect(.{});
     client.shutdown() catch unreachable;
     client.deinit();
 
     server.join();
-    Thread.sleep(time.ns_per_ms * 1000);
+    Thread.sleep(time.ns_per_ms * 200);
 }
 
 test "set-get" {
     stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
 
-    Thread.sleep(time.ns_per_ms * 1000);
+    Thread.sleep(time.ns_per_ms * 200);
 
     const ex1 = "example1";
     const ex2 = "example 2"; //with spaces
@@ -63,9 +63,9 @@ test "set-get" {
 
     // .getSized
     const value1_sized = try client.getSized(ex1, val1.len) orelse unreachable;
-    try testing.expectEqualSlices(u8, val1, value1_sized);
+    try testing.expectEqualSlices(u8, val1, &value1_sized);
     const value2_sized = try client.getSized(ex2, val2.len) orelse unreachable;
-    try testing.expectEqualSlices(u8, val2, value2_sized);
+    try testing.expectEqualSlices(u8, val2, &value2_sized);
     const value3_sized = try client.getSized("not existing", 5);
     try testing.expect(value3_sized == null);
 

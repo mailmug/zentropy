@@ -97,7 +97,22 @@ pub const Client = struct {
 
     /// caller owns memory
     pub fn getAlloc(self: *Client, gpa: Allocator, key: []const u8) !?[]u8 {
-        _ = .{ self, gpa, key };
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("GET \"{s}\"", .{key});
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(&buf);
+        const peek = try reader.file_reader.interface.peek(4);
+        if (mem.eql(u8, peek, "NONE")) {
+            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
+            return null;
+        }
+        const slice = try reader.file_reader.interface.takeDelimiter('\r') orelse unreachable;
+        try reader.file_reader.interface.discardAll(1);
+
+        return try gpa.dupe(u8, slice);
     }
 
     /// returns comptime known size string
@@ -112,6 +127,7 @@ pub const Client = struct {
 
         const peek = try reader.file_reader.interface.peek(4);
         if (mem.eql(u8, peek, "NONE")) {
+            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
             return null;
         }
 
