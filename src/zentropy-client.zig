@@ -75,7 +75,7 @@ pub const Client = struct {
         }
     }
     /// returns result slice pointing in `out`
-    pub fn get(self: *Client, key: []const u8, out: []u8) !?[]const u8 {
+    pub fn get(self: *Client, key: []const u8, out: []u8) !?[]u8 {
         var buf: [4096]u8 = undefined;
         var writer = self.stream.writer(&buf);
 
@@ -83,9 +83,16 @@ pub const Client = struct {
         try writer.interface.flush();
 
         var reader = self.stream.reader(out);
-        _ = &reader;
-        //TODO
-        @compileError("todo");
+
+        const peek = try reader.file_reader.interface.peek(4);
+        if (mem.eql(u8, peek, "NONE")) {
+            try reader.file_reader.interface.discardAll(6); //TODO make it use "NONE" variable, not plain "6"
+            return null;
+        }
+        const slice = try reader.file_reader.interface.takeDelimiter('\r');
+        try reader.file_reader.interface.discardAll(1);
+
+        return slice;
     }
 
     /// caller owns memory
