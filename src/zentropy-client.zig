@@ -183,11 +183,9 @@ pub const Client = struct {
         try writer.interface.writeAll("SHUTDOWN");
         try writer.interface.flush();
 
-        const expected_result = "===SHUTDOWN===\r\n";
-
         var reader = self.stream.reader(&buf);
-        const result = try reader.file_reader.interface.takeArray(expected_result.len);
-        if (!mem.eql(u8, expected_result, result)) {
+        const result = try reader.file_reader.interface.takeArray(responses.shutdown.len);
+        if (!mem.eql(u8, responses.shutdown, result)) {
             return error.BadResponse;
         }
     }
