@@ -18,7 +18,7 @@ pub const Client = struct {
         BadPingResponse,
     } ||
         net.TcpConnectToAddressError ||
-        Stream.WriteError ||
+        Io.Writer.Error ||
         Reader.Error ||
         net.IPv4ParseError;
 
@@ -32,12 +32,13 @@ pub const Client = struct {
         switch (builtin.mode) {
             .Debug, .ReleaseSafe => {
                 var buf: [32]u8 = undefined;
+                var writer = stream.writer(&buf);
+                try writer.interface.writeAll("PING");
+                try writer.interface.flush();
                 var reader = stream.reader(&buf);
-                try stream.writeAll("PING"); //TODO replace with writer, writeAll is deprecated
-                const expected_result = "+PONG\r\n";
-                const pong = try reader.file_reader.interface.takeArray(expected_result.len);
+                const pong = try reader.file_reader.interface.takeArray(responses.pong.len);
 
-                if (!mem.eql(u8, pong, expected_result)) {
+                if (!mem.eql(u8, pong, responses.pong)) {
                     return error.BadPingResponse;
                 }
             },
@@ -198,4 +199,5 @@ const responses = struct {
     pub const ok = "+OK\r\n";
     pub const not_deleted = "-NOT DELETED\r\n";
     pub const none = "NONE\r\n";
+    pub const pong = "+PONG\r\n";
 };
