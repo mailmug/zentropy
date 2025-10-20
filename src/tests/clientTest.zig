@@ -26,6 +26,7 @@ test "connect" {
 test "set-get" {
     stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
+    defer server.join();
 
     Thread.sleep(time.ns_per_ms * 200);
 
@@ -35,6 +36,10 @@ test "set-get" {
     const val2 = "value 2";
 
     var client = try zentropy.Client.connect(.{});
+    defer {
+        client.shutdown() catch unreachable;
+        client.deinit();
+    }
 
     try client.set(ex1, val1);
     try client.set(ex2, val2);
@@ -68,11 +73,28 @@ test "set-get" {
     try testing.expectEqualSlices(u8, val2, &value2_sized);
     const value3_sized = try client.getSized("not existing", 5);
     try testing.expect(value3_sized == null);
+}
 
-    client.shutdown() catch unreachable;
-    client.deinit();
+test "exists" {
+    stop_server.store(false, .unordered);
+    const server = try Thread.spawn(.{}, startServer, .{});
+    defer server.join();
 
-    server.join();
+    Thread.sleep(time.ns_per_ms * 200);
+
+    var client = try zentropy.Client.connect(.{});
+    defer {
+        client.shutdown() catch unreachable;
+        client.deinit();
+    }
+
+    try testing.expect(!try client.exists("example1"));
+    try testing.expect(!try client.exists("example2"));
+    try client.set("example1", "value1");
+    try testing.expect(try client.exists("example1"));
+    try testing.expect(!try client.exists("example2")); //double check
+    try client.set("example2", "value2");
+    try testing.expect(try client.exists("example2"));
 }
 
 fn startServer() !void {

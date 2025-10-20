@@ -141,7 +141,17 @@ pub const Client = struct {
 
     /// checks if key exists
     pub fn exists(self: *Client, key: []const u8) !bool {
-        _ = .{ self, key };
+        var buf: [4096]u8 = undefined;
+        var writer = self.stream.writer(&buf);
+
+        try writer.interface.print("EXISTS \"{s}\"", .{key});
+        try writer.interface.flush();
+
+        var reader = self.stream.reader(&buf);
+        const exists_byte = try reader.file_reader.interface.takeByte();
+        try reader.file_reader.interface.discardAll(2);
+
+        return if (exists_byte == '1') true else false;
     }
 
     /// deletes key, if key doesn't exists returns error.KeyNotFound
