@@ -7,28 +7,25 @@ const tcp = @import("../tcp.zig");
 const time = std.time;
 const Thread = std.Thread;
 
-var stop_server = std.atomic.Value(bool).init(false);
-
 test "connect" {
-    stop_server.store(false, .unordered);
-    const server = try Thread.spawn(.{}, startServer, .{});
-
-    Thread.sleep(time.ns_per_ms * 200);
-
-    var client = try zentropy.Client.connect(.{});
-    client.shutdown() catch unreachable;
-    client.deinit();
-
-    server.join();
-    Thread.sleep(time.ns_per_ms * 200);
-}
-
-test "set-get" {
-    stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
     defer server.join();
 
-    Thread.sleep(time.ns_per_ms * 200);
+    try waitForServerStarted();
+
+    var client = try zentropy.Client.connect(.{});
+    defer {
+        client.shutdown() catch unreachable;
+        client.deinit();
+        waitForServerStopped() catch unreachable;
+    }
+}
+
+test "set-get" {
+    const server = try Thread.spawn(.{}, startServer, .{});
+    defer server.join();
+
+    try waitForServerStarted();
 
     const ex1 = "example1";
     const ex2 = "example 2"; //with spaces
@@ -39,6 +36,7 @@ test "set-get" {
     defer {
         client.shutdown() catch unreachable;
         client.deinit();
+        waitForServerStopped() catch unreachable;
     }
 
     try client.set(ex1, val1);
@@ -76,16 +74,16 @@ test "set-get" {
 }
 
 test "exists" {
-    stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
     defer server.join();
 
-    Thread.sleep(time.ns_per_ms * 200);
+    try waitForServerStarted();
 
     var client = try zentropy.Client.connect(.{});
     defer {
         client.shutdown() catch unreachable;
         client.deinit();
+        waitForServerStopped() catch unreachable;
     }
 
     try testing.expect(!try client.exists("example1"));
@@ -98,16 +96,16 @@ test "exists" {
 }
 
 test "delete" {
-    stop_server.store(false, .unordered);
     const server = try Thread.spawn(.{}, startServer, .{});
     defer server.join();
 
-    Thread.sleep(time.ns_per_ms * 200);
+    try waitForServerStarted();
 
     var client = try zentropy.Client.connect(.{});
     defer {
         client.shutdown() catch unreachable;
         client.deinit();
+        waitForServerStopped() catch unreachable;
     }
 
     try testing.expect(!try client.delete("example1"));
@@ -123,7 +121,33 @@ test "delete" {
     try testing.expect(val2 == null);
 }
 
+fn waitForServerStarted() !void {
+    for (0..10000) |_| {
+        const client = zentropy.Client.connect(.{}) catch {
+            Thread.sleep(time.ns_per_us * 50);
+            continue;
+        };
+        defer client.deinit();
+        return;
+    }
+    return error.Timeout;
+}
+
+fn waitForServerStopped() !void {
+    for (0..10000) |_| {
+        const client = zentropy.Client.connect(.{}) catch {
+            return;
+        };
+        client.deinit();
+        Thread.sleep(time.ns_per_us * 50);
+        continue;
+    }
+
+    return error.Timeout;
+}
+
 fn startServer() !void {
+    var stop_server = std.atomic.Value(bool).init(false);
     var store = KVStore.init(testing.allocator);
     defer store.deinit();
     var app_config = try config.load(testing.allocator);
