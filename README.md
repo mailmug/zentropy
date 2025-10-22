@@ -56,8 +56,17 @@ Zig Build version: 0.15.1+
 | Key-Value   | 0.0098s  | 0.0020s  | 🟢 Zentropy 4.82x faster |
 
 
-## 🧩 How to Install
-
+## 🧩 How to Install?
+**Using Homebrew**
+```bash
+ brew tap mailmug/zentropy                                                         
+ brew install mailmug/zentropy/zentropy@1.0
+```
+Start service
+```bash
+    brew services start zentropy@1.0 
+```
+## Install Manually
 **Step 1:** Download the [release binary](https://github.com/mailmug/zentropy/releases/tag/v1.0.0)
 
 **Step 2:** Extract the ZIP file.
