@@ -6,6 +6,7 @@ pub fn build(b: *std.Build) void {
     const mod = b.addModule("zentropy", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .optimize = optimize,
     });
 
     const exe = b.addExecutable(.{
@@ -36,6 +37,7 @@ pub fn build(b: *std.Build) void {
     const mod_tests = b.addTest(.{
         .root_module = mod,
     });
+    mod_tests.root_module.addImport("zentropy", mod);
 
     // A run step that will run the test executable.
     const run_mod_tests = b.addRunArtifact(mod_tests);
