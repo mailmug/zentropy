@@ -89,7 +89,7 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
                 } else {
                     const msg = buf[0..read];
                     const result = try handleConnection(polled.fd, store, msg);
-                    if (std.mem.eql(u8, result, "SHUTDOWN")) {
+                    if (result != null and std.mem.eql(u8, result.?, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("tcp") catch {};
                     }
@@ -119,6 +119,6 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
     }
 }
 
-pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
+pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) !?[]const u8 {
     return commands.parseCmd(fd, store, msg);
 }

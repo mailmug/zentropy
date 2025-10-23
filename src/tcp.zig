@@ -98,7 +98,7 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
                 } else {
                     const msg = buf[0..read];
                     const result = try handleConnection(polled.fd, store, msg, app_config, &auth_map);
-                    if (std.mem.eql(u8, result, "SHUTDOWN")) {
+                    if (result != null and std.mem.eql(u8, result.?, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("unix_socket") catch {};
                     }
@@ -128,7 +128,7 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
     }
 }
 
-pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: *const Config, auth_map: *std.AutoHashMap(posix.fd_t, bool)) ![]const u8 {
+pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8, app_config: *const Config, auth_map: *std.AutoHashMap(posix.fd_t, bool)) !?[]const u8 {
     if (std.mem.startsWith(u8, msg, "AUTH ")) {
         const pass = trimCrlf(msg[5..]);
         if (app_config.password != null and std.mem.eql(u8, pass, app_config.password.?)) {

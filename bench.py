@@ -77,7 +77,7 @@ class SocketPerformanceTest:
             
             redis_time = time.time() - start_time
             sock.close()
-            print(f"Redis write {data_size} records: {redis_time:.4f}s ({data_size/redis_time:.1f} ops/sec)")
+            print(f"Redis write {data_size} records: {redis_time*1000:.2f} ms ({data_size/redis_time:.1f} ops/sec)")
             return redis_time
             
         except Exception as e:
@@ -104,7 +104,7 @@ class SocketPerformanceTest:
             
             zt_time = time.time() - start_time
             sock.close()
-            print(f"Zentropy write {data_size} records: {zt_time:.4f}s ({data_size/zt_time:.1f} ops/sec)")
+            print(f"Zentropy write {data_size} records: {zt_time*1000:.2f} ms ({data_size/zt_time:.1f} ops/sec)")
             return zt_time
             
         except Exception as e:
@@ -137,7 +137,7 @@ class SocketPerformanceTest:
             
             redis_time = (time.time() - start_time) / iterations
             sock.close()
-            print(f"Redis read {data_size} records: {redis_time:.4f}s avg")
+            print(f"Redis read {data_size} records: {redis_time*1000:.2f} ms avg")
             return redis_time
             
         except Exception as e:
@@ -170,7 +170,7 @@ class SocketPerformanceTest:
             
             zt_time = (time.time() - start_time) / iterations
             sock.close()
-            print(f"Zentropy read {data_size} records: {zt_time:.4f}s avg")
+            print(f"Zentropy read {data_size} records: {zt_time*1000:.2f} ms avg")
             return zt_time
             
         except Exception as e:
@@ -199,7 +199,7 @@ class SocketPerformanceTest:
                 redis_time = time.time() - start_time
                 sock.close()
                 results['redis'] = redis_time
-                print(f"Redis SET/GET {data_size} pairs: {redis_time:.4f}s")
+                print(f"Redis SET/GET {data_size} pairs: {redis_time*1000:.2f} ms")
                 
             except Exception as e:
                 print(f"Redis SET/GET failed: {e}")
@@ -223,7 +223,7 @@ class SocketPerformanceTest:
                 zt_time = time.time() - start_time
                 sock.close()
                 results['zentropy'] = zt_time
-                print(f"Zentropy SET/GET {data_size} pairs: {zt_time:.4f}s")
+                print(f"Zentropy SET/GET {data_size} pairs: {zt_time*1000:.2f} ms")
                 
             except Exception as e:
                 print(f"Zentropy SET/GET failed: {e}")
@@ -288,11 +288,11 @@ class SocketPerformanceTest:
                 if redis_time and zt_time:
                     faster = "Zentropy" if zt_time < redis_time else "Redis"
                     ratio = redis_time / zt_time if zt_time < redis_time else zt_time / redis_time
-                    print(f"Redis: {redis_time:.4f}s | Zentropy: {zt_time:.4f}s | {faster} is {ratio:.2f}x faster")
+                    print(f"Redis: {redis_time*1000:.2f} ms | Zentropy: {zt_time*1000:.2f} ms | {faster} is {ratio:.2f}x faster")
                 elif redis_time:
-                    print(f"Redis: {redis_time:.4f}s | Zentropy: N/A")
+                    print(f"Redis: {redis_time:.2f}ms | Zentropy: N/A")
                 elif zt_time:
-                    print(f"Redis: N/A | Zentropy: {zt_time:.4f}s")
+                    print(f"Redis: N/A | Zentropy: {zt_time:.2f}ms")
                 else:
                     print("Both: N/A")
 

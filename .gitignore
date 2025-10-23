@@ -11,6 +11,7 @@ zig-out/bin/*
 *.so
 *.dylib
 *.dll
+.venv/
 
 # Zig build output directories
 build/

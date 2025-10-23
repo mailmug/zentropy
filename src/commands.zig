@@ -4,95 +4,175 @@ const commands = @This();
 const info = @import("info.zig");
 const posix = std.posix;
 
-pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []u8) ![]const u8 {
+const Command = enum {
+    ping,
+    info,
+    set,
+    get,
+    exists,
+    delete,
+    shutdown,
+    unknown,
 
-    // var partsList = splitToArray(msg, allocator) catch unreachable;
-    var parts_buffer: [10][]const u8 = undefined; // Stack allocation
+    pub fn fromString(cmd_str: []const u8) Command {
+        const trimmed_cmd = std.mem.trim(u8, cmd_str, "\r\n");
+
+        if (std.mem.eql(u8, trimmed_cmd, "PING")) return .ping;
+        if (std.mem.eql(u8, trimmed_cmd, "INFO")) return .info;
+        if (std.mem.eql(u8, trimmed_cmd, "SET")) return .set;
+        if (std.mem.eql(u8, trimmed_cmd, "GET")) return .get;
+        if (std.mem.eql(u8, trimmed_cmd, "EXISTS")) return .exists;
+        if (std.mem.eql(u8, trimmed_cmd, "DELETE")) return .delete;
+        if (std.mem.eql(u8, trimmed_cmd, "SHUTDOWN")) return .shutdown;
+
+        return .unknown;
+    }
+};
+
+const ParseResult = struct {
+    command: Command,
+    args: []const []const u8,
+};
+
+pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []const u8) ?[]const u8 {
+    // Stack-allocated buffer for command parts
+    var parts_buffer: [10][]const u8 = undefined;
     const parts = parseCommand(msg, &parts_buffer);
 
     if (parts.len == 0) {
-        return "";
+        return null;
     }
 
-    const _cmd = parts[0];
-    const cmd = std.mem.trim(u8, _cmd, "\r\n");
+    const parse_result = ParseResult{
+        .command = Command.fromString(parts[0]),
+        .args = parts[1..],
+    };
 
-    if (std.mem.eql(u8, cmd, "PING")) {
-        if (validCheckCmdLen(parts.len, 1, fd)) {
-            _ = try posix.write(fd, "+PONG\r\n");
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "INFO")) {
-        if (validCheckCmdLen(parts.len, 1, fd)) {
-            const infoStr = info.name ++ " " ++ info.version;
-            _ = try posix.write(fd, infoStr ++ "\r\n");
-            // const count = store.count();
-            // const message = try std.fmt.allocPrint(allocator, "total_keys:{}\r\n", .{count});
-            const message = "6";
-            // defer allocator.free(message);
-            _ = try posix.write(fd, message);
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "SET")) {
-        if (validCheckCmdLen(parts.len, 3, fd)) {
-            try store.set(parts[1], parts[2]);
-            _ = try posix.write(fd, "+OK\r\n");
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "GET")) {
-        if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            const key_str = std.mem.trim(u8, key, "\r\n");
-            const val = store.get(key_str);
-
-            if (val) |v| {
-                _ = try posix.write(fd, v);
-                _ = try posix.write(fd, "\r\n");
-            } else {
-                _ = try posix.write(fd, "NONE\r\n");
-            }
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "EXISTS")) {
-        if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            const key_str = std.mem.trim(u8, key, "\r\n");
-            const exists = store.contains(key_str);
-            if (exists) {
-                _ = try posix.write(fd, "1\r\n");
-            } else {
-                _ = try posix.write(fd, "0\r\n");
-            }
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "DELETE")) {
-        if (validCheckCmdLen(parts.len, 2, fd)) {
-            const key = parts[1];
-            if (store.delete(key)) {
-                _ = posix.write(fd, "+OK\r\n") catch {};
-                return "";
-            }
-            _ = posix.write(fd, "-NOT DELETED\r\n") catch {};
-            return "";
-        }
-    } else if (std.mem.eql(u8, cmd, "SHUTDOWN")) {
-        _ = posix.write(fd, "===SHUTDOWN===\r\n") catch {};
-        return "SHUTDOWN";
-    } else {
-        if (validCheckCmdLen(parts.len, 2, fd)) {
-            _ = posix.write(fd, "-ERR unknown command\r\n") catch {};
-            return "";
-        }
-    }
-    return "";
+    return switch (parse_result.command) {
+        .ping => handlePing(fd, parse_result.args),
+        .info => handleInfo(fd, store, parse_result.args),
+        .set => handleSet(fd, store, parse_result.args),
+        .get => handleGet(fd, store, parse_result.args),
+        .exists => handleExists(fd, store, parse_result.args),
+        .delete => handleDelete(fd, store, parse_result.args),
+        .shutdown => handleShutdown(fd, parse_result.args),
+        .unknown => handleUnknown(fd, parse_result.args),
+    };
 }
 
-fn validCheckCmdLen(len: usize, expectedLen: usize, fd: i32) bool {
-    if (len != expectedLen) {
-        _ = posix.write(fd, "-ERR wrong number of arguments\r\n") catch {};
-        return false;
+fn handlePing(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 0, fd)) return null;
+    _ = sendResponse(fd, "+PONG\r\n");
+    return null;
+}
+
+fn handleInfo(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 0, fd)) return null;
+
+    const info_str = info.name ++ " " ++ info.version;
+    _ = sendResponse(fd, info_str ++ "\r\n");
+    _ = store;
+    return null;
+}
+
+fn handleSet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+    if (args.len < 2) {
+        _ = sendError(fd, "ERR wrong number of arguments for SET");
+        return null;
     }
-    return true;
+
+    const key = std.mem.trim(u8, args[0], "\r\n");
+    const value = std.mem.trim(u8, args[1], "\r\n");
+
+    if (args.len == 2) {
+        // SET key value
+        store.set(key, value) catch {};
+        _ = sendResponse(fd, "+OK\r\n");
+    } else if (args.len == 4) {
+        // SET key value EX seconds | PX milliseconds
+        const expire_type = std.mem.trim(u8, args[2], "\r\n");
+        const expire_str = std.mem.trim(u8, args[3], "\r\n");
+
+        if (parseExpireTime(expire_type, expire_str, fd)) |ms| {
+            store.setWithExpiry(key, value, ms) catch {};
+            _ = sendResponse(fd, "+OK\r\n");
+        }
+    } else {
+        _ = sendError(fd, "ERR syntax error");
+    }
+
+    return null;
+}
+
+fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 1, fd)) return null;
+
+    const key = std.mem.trim(u8, args[0], "\r\n");
+
+    if (store.get(key)) |value| {
+        _ = sendBulkResponse(fd, value);
+    } else {
+        _ = sendResponse(fd, "$-1\r\n");
+    }
+
+    return null;
+}
+
+fn handleExists(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 1, fd)) return null;
+
+    const key = std.mem.trim(u8, args[0], "\r\n");
+    const exists = store.contains(key);
+
+    _ = sendIntegerResponse(fd, if (exists) 1 else 0);
+    return null;
+}
+
+fn handleDelete(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 1, fd)) return null;
+
+    const key = std.mem.trim(u8, args[0], "\r\n");
+
+    if (store.delete(key)) {
+        _ = sendIntegerResponse(fd, 1);
+    } else {
+        _ = sendIntegerResponse(fd, 0);
+    }
+
+    return null;
+}
+
+fn handleShutdown(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+    if (!validateArgumentCount(args.len, 0, fd)) return null;
+    _ = sendResponse(fd, "+SHUTDOWN initiated\r\n");
+    return "SHUTDOWN";
+}
+
+fn handleUnknown(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+    _ = args; // unused
+    _ = sendError(fd, "ERR unknown command");
+    return null;
+}
+
+fn parseExpireTime(expire_type: []const u8, expire_str: []const u8, fd: posix.fd_t) ?u32 {
+    if (std.mem.eql(u8, expire_type, "EX")) {
+        if (std.fmt.parseInt(u32, expire_str, 10)) |seconds| {
+            return seconds * 1000;
+        } else |_| {
+            _ = sendError(fd, "ERR invalid expire time");
+            return null;
+        }
+    } else if (std.mem.eql(u8, expire_type, "PX")) {
+        if (std.fmt.parseInt(u32, expire_str, 10)) |ms| {
+            return ms;
+        } else |_| {
+            _ = sendError(fd, "ERR invalid expire time");
+            return null;
+        }
+    } else {
+        _ = sendError(fd, "ERR syntax error");
+        return null;
+    }
 }
 
 fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
@@ -108,7 +188,7 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
         const start = i;
 
         if (msg[i] == '"' or msg[i] == '\'') {
-            // Quoted string
+            // Quoted string handling
             const quote_char = msg[i];
             i += 1; // Skip opening quote
             const quote_start = i;
@@ -136,22 +216,49 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
 
     return output[0..count];
 }
-fn splitToSlice(msg: []const u8, delimiter: []const u8, output: []([]const u8)) []const []const u8 {
-    var count: usize = 0;
-    var iter = std.mem.splitSequence(u8, msg, delimiter);
 
-    while (iter.next()) |part| {
-        if (count >= output.len) break;
-        // Trim quotes if present
-        var trimmed_part = part;
-        if (part.len >= 2 and ((part[0] == '\'' and part[part.len - 1] == '\'') or
-            (part[0] == '"' and part[part.len - 1] == '"')))
-        {
-            trimmed_part = part[1 .. part.len - 1];
-        }
-        output[count] = trimmed_part;
-        count += 1;
+fn validateArgumentCount(actual: usize, expected: usize, fd: posix.fd_t) bool {
+    if (actual != expected) {
+        _ = sendError(fd, "ERR wrong number of arguments");
+        return false;
     }
+    return true;
+}
 
-    return output[0..count];
+fn sendResponse(fd: posix.fd_t, response: []const u8) bool {
+    const bytes_written = posix.write(fd, response) catch return false;
+    return bytes_written == response.len;
+}
+
+fn sendError(fd: posix.fd_t, error_msg: []const u8) bool {
+    // Use a fixed buffer and format the response
+    var buffer: [256]u8 = undefined;
+
+    if (std.fmt.bufPrint(&buffer, "-{s}\r\n", .{error_msg})) |response| {
+        return sendResponse(fd, response);
+    } else |_| {
+        return sendResponse(fd, "-ERR\r\n");
+    }
+}
+
+fn sendBulkResponse(fd: posix.fd_t, value: []const u8) bool {
+    var buffer: [128]u8 = undefined;
+    if (std.fmt.bufPrint(&buffer, "${}\r\n", .{value.len})) |len_str| {
+        if (!sendResponse(fd, len_str)) return false;
+        if (!sendResponse(fd, value)) return false;
+        return sendResponse(fd, "\r\n");
+    } else |_| {
+        _ = sendError(fd, "ERR response too large");
+        return false;
+    }
+}
+
+fn sendIntegerResponse(fd: posix.fd_t, value: i64) bool {
+    var buffer: [32]u8 = undefined;
+    if (std.fmt.bufPrint(&buffer, ":{}\r\n", .{value})) |response| {
+        return sendResponse(fd, response);
+    } else |_| {
+        _ = sendError(fd, "ERR integer formatting error");
+        return false;
+    }
 }
