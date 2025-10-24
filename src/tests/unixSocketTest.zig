@@ -31,7 +31,7 @@ test "stop server" {
     w.writeAll("SHUTDOWN") catch unreachable;
     w.flush() catch unreachable;
     const response = readResponse(conn, &buf) catch unreachable;
-    try std.testing.expect(std.mem.indexOf(u8, response, "===SHUTDOWN===") != null);
+    try std.testing.expect(std.mem.indexOf(u8, response, "+SHUTDOWN initiated") != null);
     defer server_thread.?.join();
 }
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const time = std.time;
 
 pub const KVStore = @This();
 
@@ -12,6 +13,7 @@ arena: std.heap.ArenaAllocator,
 
 const Entry = struct {
     value: []const u8,
+    expires_at: ?u64 = null,
 };
 
 pub fn init(allocator: std.mem.Allocator) KVStore {
@@ -50,6 +52,13 @@ pub fn set(self: *KVStore, key: []const u8, value: []const u8) !void {
 
 pub fn get(self: *KVStore, key: []const u8) ?[]const u8 {
     if (self.map.getPtr(key)) |entry| {
+        if (entry.expires_at) |expires| {
+            const now = time.milliTimestamp();
+            if (now >= expires) {
+                _ = self.map.remove(key);
+                return null;
+            }
+        }
         return entry.value;
     }
     return null;
@@ -68,6 +77,44 @@ pub fn delete(self: *KVStore, key: []const u8) bool {
         return true;
     }
     return false;
+}
+
+pub fn setWithExpiry(self: *KVStore, key: []const u8, value: []const u8, ttl_ms: ?u32) !void {
+    const arena = self.arena.allocator();
+
+    const key_copy = try arena.dupe(u8, key);
+    const value_copy = try arena.dupe(u8, value);
+
+    const expires_at = if (ttl_ms) |ttl|
+        @as(u64, @intCast(time.milliTimestamp())) + ttl
+    else
+        null;
+
+    const entry = Entry{ .value = value_copy, .expires_at = expires_at };
+
+    // Use getOrPut to handle both new and existing keys
+    const gop = try self.map.getOrPut(self.allocator, key_copy);
+    if (!gop.found_existing) {
+        gop.key_ptr.* = key_copy;
+    }
+    gop.value_ptr.* = entry;
+}
+
+pub fn getWithExpiry(self: *KVStore, key: []const u8) struct { value: ?[]const u8, expires_at: ?u64 } {
+    if (self.map.getPtr(key)) |entry| {
+        // Check if entry has expired
+        if (entry.expires_at) |expires| {
+            const now = time.milliTimestamp();
+            if (now >= expires) {
+                // Entry has expired, remove it and return null
+                _ = self.map.remove(key);
+                return .{ .value = null, .expires_at = null };
+            }
+            return .{ .value = entry.value, .expires_at = expires };
+        }
+        return .{ .value = entry.value, .expires_at = null };
+    }
+    return .{ .value = null, .expires_at = null };
 }
 
 pub fn saveToFile(self: *KVStore, path: []const u8) !void {

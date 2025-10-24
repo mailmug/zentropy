@@ -117,7 +117,7 @@ test "stop server" {
     w.writeAll("SHUTDOWN") catch unreachable;
     w.flush() catch unreachable;
     const response = readResponse(conn, &buf) catch unreachable;
-    try std.testing.expect(std.mem.indexOf(u8, response, "===SHUTDOWN===") != null);
+    try std.testing.expect(std.mem.indexOf(u8, response, "+SHUTDOWN initiated") != null);
     defer server_thread.?.join();
 }
 
@@ -134,7 +134,7 @@ fn startServer() !void {
     const allocator = gpa.allocator();
     var store = KVStore.init(allocator);
     defer store.deinit();
-    var app_config = try config.load(allocator);
+    var app_config = try config.load(allocator, null);
     defer app_config.deinit(allocator);
     tcp.startServer(&store, &stop_server, &app_config) catch |err| {
         std.debug.print("Server error: {}\n", .{err});

@@ -5,7 +5,12 @@ bind_address: []const u8 = "127.0.0.1",
 port: u16 = 6383,
 password: ?[]const u8 = null,
 
-pub fn load(allocator: std.mem.Allocator) !Config {
+pub const version: []const u8 = "1.1.0";
+
+pub fn load(allocator: std.mem.Allocator, configPath: ?[]const u8) !Config {
+    if (configPath) |full_path| {
+        return loadFromFile(allocator, full_path);
+    }
     const possible_paths = &[_][]const u8{
         "./zentropy.conf", // Current directory
         "zentropy.conf", // Current directory
@@ -17,13 +22,6 @@ pub fn load(allocator: std.mem.Allocator) !Config {
 
     const exe_dir = try std.fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(exe_dir);
-
-    const full_path = try std.fs.path.join(allocator, &[_][]const u8{ exe_dir, "zentropy.conf" });
-    defer allocator.free(full_path);
-
-    if (fileExists(full_path)) {
-        return loadFromFile(allocator, full_path);
-    }
 
     for (possible_paths) |path| {
         if (fileExists(path)) {
