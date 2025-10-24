@@ -18,6 +18,8 @@ dist/
 out/
 venv/
 venv/*
+.venv/
+release/
 
 # Zig installed packages
 zig-packages/
