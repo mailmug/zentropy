@@ -80,7 +80,7 @@ password pass@123
 ```
 **Step 4:** Run the binary based on your CPU architecture:
 ```bash
-./zentropy
+./zentropy --config path/to/zentropy.conf
 ```
 
 ✅ Tip: Once the server is running, you can test it using the [Python Client](https://pypi.org/project/zentropy-py/):
