@@ -119,7 +119,6 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
 
                     const read_slice = buffer.data[buffer.len..];
                     const read = posix.read(polled.fd, read_slice) catch 0;
-
                     if (read == 0) {
                         // Socket closed by peer
                         break;

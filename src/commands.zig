@@ -106,7 +106,6 @@ fn handleSet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const
 
 fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
     if (!validateArgumentCount(args.len, 1, fd)) return null;
-
     const key = std.mem.trim(u8, args[0], "\r\n");
 
     if (store.get(key)) |value| {
@@ -114,7 +113,6 @@ fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const
     } else {
         _ = sendResponse(fd, "$-1\r\n");
     }
-
     return null;
 }
 
@@ -226,8 +224,27 @@ fn validateArgumentCount(actual: usize, expected: usize, fd: posix.fd_t) bool {
 }
 
 fn sendResponse(fd: posix.fd_t, response: []const u8) bool {
-    const bytes_written = posix.write(fd, response) catch return false;
-    return bytes_written == response.len;
+    var total_sent: usize = 0;
+    const max_attempts = 10;
+    var attempts: usize = 0;
+
+    while (total_sent < response.len and attempts < max_attempts) {
+        const remaining = response[total_sent..];
+        const bytes_written = posix.write(fd, remaining) catch |err| switch (err) {
+            error.WouldBlock => {
+                std.Thread.sleep(1_000_000); // 1ms in nanoseconds
+                attempts += 1;
+                continue;
+            },
+            else => return false,
+        };
+
+        if (bytes_written == 0) return false;
+        total_sent += bytes_written;
+        attempts = 0;
+    }
+
+    return total_sent == response.len;
 }
 
 fn sendError(fd: posix.fd_t, error_msg: []const u8) bool {

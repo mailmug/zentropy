@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const fs = std.fs;
 const posix = std.posix;
 const KVStore = @import("KVStore.zig");
-const tcp = @import("tcp.zig");
 const shutdown = @import("shutdown.zig");
 const commands = @import("commands.zig");
 const Buffer = @import("Buffer.zig");
@@ -110,7 +109,6 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
 
                     const read_slice = buffer.data[buffer.len..];
                     const read = posix.read(polled.fd, read_slice) catch 0;
-
                     if (read == 0) {
                         // Socket closed by peer
                         break;
