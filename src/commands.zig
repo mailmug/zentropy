@@ -225,7 +225,7 @@ fn validateArgumentCount(actual: usize, expected: usize, fd: posix.fd_t) bool {
 
 fn sendResponse(fd: posix.fd_t, response: []const u8) bool {
     var total_sent: usize = 0;
-    const max_attempts = 10;
+    const max_attempts = 100;
     var attempts: usize = 0;
 
     while (total_sent < response.len and attempts < max_attempts) {
