@@ -1,12 +1,26 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const fs = std.fs;
 const posix = std.posix;
 const KVStore = @import("KVStore.zig");
 const tcp = @import("tcp.zig");
 const shutdown = @import("shutdown.zig");
 const commands = @import("commands.zig");
+const Buffer = @import("Buffer.zig");
 
 pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.atomic.Value(bool)) !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = if (builtin.mode == .Debug)
+        gpa.allocator()
+    else
+        std.heap.page_allocator;
+
+    defer if (builtin.mode == .Debug) {
+        switch (gpa.deinit()) {
+            .ok => {},
+            .leak => @panic("Memory leak detected!"),
+        }
+    };
     // Remove old socket
     _ = fs.cwd().deleteFile(unix_path) catch {};
 
@@ -81,13 +95,34 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
 
             // the socket is ready to be read
             if (revents & posix.POLL.IN == posix.POLL.IN) {
-                var buf: [4096]u8 = undefined;
-                const read = posix.read(polled.fd, &buf) catch 0;
-                if (read == 0) {
+                var fixed_mem: [4096]u8 = undefined;
+                var buffer = Buffer.init(&fixed_mem, allocator);
+                defer buffer.deinit();
+
+                try buffer.ensureCapacity(4096);
+
+                while (true) {
+                    // Always make sure there is free space for new data
+                    const remaining = buffer.data.len - buffer.len;
+                    if (remaining < 512) { // low free space → expand
+                        try buffer.ensureCapacity(buffer.len + 4096);
+                    }
+
+                    const read_slice = buffer.data[buffer.len..];
+                    const read = posix.read(polled.fd, read_slice) catch 0;
+
+                    if (read == 0) {
+                        // Socket closed by peer
+                        break;
+                    }
+
+                    buffer.len += read;
+                }
+                if (buffer.len == 0) {
                     // probably closed on the other side
                     closed = true;
                 } else {
-                    const msg = buf[0..read];
+                    const msg = buffer.items();
                     const result = try handleConnection(polled.fd, store, msg);
                     if (result != null and std.mem.eql(u8, result.?, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);

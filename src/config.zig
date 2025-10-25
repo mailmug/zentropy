@@ -5,7 +5,7 @@ bind_address: []const u8 = "127.0.0.1",
 port: u16 = 6383,
 password: ?[]const u8 = null,
 
-pub const version: []const u8 = "1.1.0";
+pub const version: []const u8 = "1.1.1";
 
 pub fn load(allocator: std.mem.Allocator, configPath: ?[]const u8) !Config {
     if (configPath) |full_path| {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const KVStore = @import("KVStore.zig");
 const net = std.net;
 const os = std.os;
@@ -7,10 +8,22 @@ const tcp = @This();
 const shutdown = @import("shutdown.zig");
 const commands = @import("commands.zig");
 const Config = @import("config.zig");
+const Buffer = @import("Buffer.zig");
 
 pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_config: *const Config) !void {
-    const gpa = std.heap.page_allocator;
-    var auth_map = std.AutoHashMap(posix.fd_t, bool).init(gpa);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = if (builtin.mode == .Debug)
+        gpa.allocator()
+    else
+        std.heap.page_allocator;
+
+    defer if (builtin.mode == .Debug) {
+        switch (gpa.deinit()) {
+            .ok => {},
+            .leak => @panic("Memory leak detected!"),
+        }
+    };
+    var auth_map = std.AutoHashMap(posix.fd_t, bool).init(allocator);
     defer auth_map.deinit();
 
     const address = std.net.Address.parseIp(app_config.bind_address, app_config.port) catch return;
@@ -90,13 +103,35 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
 
             // the socket is ready to be read
             if (revents & posix.POLL.IN == posix.POLL.IN) {
-                var buf: [4096]u8 = undefined;
-                const read = posix.read(polled.fd, &buf) catch 0;
-                if (read == 0) {
+                var fixed_mem: [4096]u8 = undefined;
+                var buffer = Buffer.init(&fixed_mem, allocator);
+                defer buffer.deinit();
+
+                try buffer.ensureCapacity(4096);
+
+                while (true) {
+                    // Always make sure there is free space for new data
+                    const remaining = buffer.data.len - buffer.len;
+
+                    if (remaining < 512) { // low free space → expand
+                        try buffer.ensureCapacity(buffer.len + 4096);
+                    }
+
+                    const read_slice = buffer.data[buffer.len..];
+                    const read = posix.read(polled.fd, read_slice) catch 0;
+
+                    if (read == 0) {
+                        // Socket closed by peer
+                        break;
+                    }
+
+                    buffer.len += read;
+                }
+                if (buffer.len == 0) {
                     // probably closed on the other side
                     closed = true;
                 } else {
-                    const msg = buf[0..read];
+                    const msg = buffer.items();
                     const result = try handleConnection(polled.fd, store, msg, app_config, &auth_map);
                     if (result != null and std.mem.eql(u8, result.?, "SHUTDOWN")) {
                         stop_server.store(true, .seq_cst);
