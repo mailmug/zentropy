@@ -60,11 +60,11 @@ Zig Build version: 0.15.1+
 **Using Homebrew**
 ```bash
 brew tap mailmug/zentropy
-brew install mailmug/zentropy/zentropy@1.0
+brew install mailmug/zentropy/zentropy@1.1.2
 ```
 Start service
 ```bash
-brew services start zentropy@1.0
+brew services start zentropy@1.1.2
 ```
 ## Install Manually
 **Step 1:** Download the [release binary](https://github.com/mailmug/zentropy/releases/tag/v1.0.0)
