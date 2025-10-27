@@ -107,9 +107,11 @@ SET apple red
 # -> +OK
 
 GET apple
+# -> $3
 # -> red
 
 DELETE apple
+# -> :1
 ```
 
 
