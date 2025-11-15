@@ -45,5 +45,3 @@ pub fn main() !void {
         unix_thread.join();
     }
 }
-
-fn startUnixSocketServer() void {}

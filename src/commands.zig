@@ -4,7 +4,7 @@ const commands = @This();
 const info = @import("info.zig");
 const posix = std.posix;
 
-const Command = enum {
+pub const Command = enum {
     ping,
     info,
     set,
@@ -34,7 +34,7 @@ const ParseResult = struct {
     args: []const []const u8,
 };
 
-pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []const u8) ?[]const u8 {
+pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []const u8) ?Command {
     // Stack-allocated buffer for command parts
     var parts_buffer: [10][]const u8 = undefined;
     const parts = parseCommand(msg, &parts_buffer);
@@ -60,13 +60,13 @@ pub fn parseCmd(fd: posix.fd_t, store: *KVStore, msg: []const u8) ?[]const u8 {
     };
 }
 
-fn handlePing(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+fn handlePing(fd: posix.fd_t, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 0, fd)) return null;
     _ = sendResponse(fd, "+PONG\r\n");
     return null;
 }
 
-fn handleInfo(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+fn handleInfo(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 0, fd)) return null;
 
     const info_str = info.name ++ " " ++ info.version;
@@ -75,7 +75,7 @@ fn handleInfo(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]cons
     return null;
 }
 
-fn handleSet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+fn handleSet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?Command {
     if (args.len < 2) {
         _ = sendError(fd, "ERR wrong number of arguments for SET");
         return null;
@@ -104,7 +104,7 @@ fn handleSet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const
     return null;
 }
 
-fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 1, fd)) return null;
     const key = std.mem.trim(u8, args[0], "\r\n");
 
@@ -116,7 +116,7 @@ fn handleGet(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const
     return null;
 }
 
-fn handleExists(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+fn handleExists(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 1, fd)) return null;
 
     const key = std.mem.trim(u8, args[0], "\r\n");
@@ -126,7 +126,7 @@ fn handleExists(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]co
     return null;
 }
 
-fn handleDelete(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]const u8 {
+fn handleDelete(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 1, fd)) return null;
 
     const key = std.mem.trim(u8, args[0], "\r\n");
@@ -140,13 +140,13 @@ fn handleDelete(fd: posix.fd_t, store: *KVStore, args: []const []const u8) ?[]co
     return null;
 }
 
-fn handleShutdown(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+fn handleShutdown(fd: posix.fd_t, args: []const []const u8) ?Command {
     if (!validateArgumentCount(args.len, 0, fd)) return null;
     _ = sendResponse(fd, "+SHUTDOWN initiated\r\n");
-    return "SHUTDOWN";
+    return .shutdown;
 }
 
-fn handleUnknown(fd: posix.fd_t, args: []const []const u8) ?[]const u8 {
+fn handleUnknown(fd: posix.fd_t, args: []const []const u8) ?Command {
     _ = args; // unused
     _ = sendError(fd, "ERR unknown command");
     return null;
