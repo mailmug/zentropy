@@ -149,7 +149,7 @@ fn handleShutdown(fd: posix.fd_t, args: []const []const u8) ?Command {
 fn handleUnknown(fd: posix.fd_t, args: []const []const u8) ?Command {
     _ = args; // unused
     _ = sendError(fd, "ERR unknown command");
-    return null;
+    return .unknown;
 }
 
 fn parseExpireTime(expire_type: []const u8, expire_str: []const u8, fd: posix.fd_t) ?u32 {

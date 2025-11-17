@@ -85,7 +85,7 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
                 if (clients.getPtr(polled.fd)) |client| {
                     close_client = try handleClientRead(client);
                     const result = handleConnection(client, store, client.buffer.items(), app_config);
-                    client.buffer.reset();
+                    // client.buffer.reset();
                     if (result == commands.Command.shutdown) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("unix_socket") catch {};
