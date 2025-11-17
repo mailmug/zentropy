@@ -80,4 +80,6 @@ pub fn reset(self: *Buffer) void {
     self.allocator = self.fba.allocator();
     self.using_fba = true;
     self.len = 0;
+    self.multi_size = 0;
+    self.multi_size_str = "";
 }
