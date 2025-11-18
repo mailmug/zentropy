@@ -1,6 +1,6 @@
 <p align="center"><a href="#logo"><img src="https://raw.githubusercontent.com/mailmug/zentropy/main/logo.png" width="200" alt="Zentropy Logo"></a></p>
 <p align="center">
-    <a href="https://github.com/mailmug/zentropy/releases/latest"><img src="https://img.shields.io/github/v/release/mailmug/zentropy-php" /></a>
+    <a href="https://github.com/mailmug/zentropy/releases/latest"><img src="https://img.shields.io/github/v/release/mailmug/zentropy" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/mailmug/zentropy" /></a>
 </p>
 
