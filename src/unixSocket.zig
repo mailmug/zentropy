@@ -91,9 +91,6 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
                     var result: ?commands.Command = null;
                     const multi_size_str_len = client.buffer.multi_size_str.len + 3;
                     if (client.buffer.len > 4 and client.buffer.multi_size > 0 and client.buffer.data[multi_size_str_len..client.buffer.len].len == client.buffer.multi_size + 2) {
-                        var file = try std.fs.cwd().createFile("zzzzzz.txt", .{});
-                        defer file.close();
-                        try file.writeAll(client.buffer.data[multi_size_str_len..client.buffer.len]);
                         result = commands.parseCmd(client.fd, store, client.buffer.data[multi_size_str_len..client.buffer.len]);
                         client.buffer.reset();
                     }

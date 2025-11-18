@@ -217,7 +217,7 @@ fn parseCommand(msg: []const u8, output: []([]const u8)) []const []const u8 {
 
 fn validateArgumentCount(actual: usize, expected: usize, fd: posix.fd_t) bool {
     if (actual != expected) {
-        _ = sendError(fd, "ERR wrong number of arguments");
+        _ = sendError(fd, "ERR wrong number of arguments.");
         return false;
     }
     return true;
