@@ -6,6 +6,7 @@ const KVStore = @import("KVStore.zig");
 const shutdown = @import("shutdown.zig");
 const commands = @import("commands.zig");
 const Buffer = @import("Buffer.zig");
+const Client = @import("Client.zig");
 
 pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.atomic.Value(bool)) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -20,6 +21,16 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
             .leak => @panic("Memory leak detected!"),
         }
     };
+
+    var clients = std.AutoHashMap(posix.fd_t, Client).init(allocator);
+    defer {
+        var it = clients.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.deinit();
+        }
+        clients.deinit();
+    }
+
     // Remove old socket
     _ = fs.cwd().deleteFile(unix_path) catch {};
 
@@ -34,124 +45,121 @@ pub fn startServer(store: *KVStore, unix_path: []const u8, stop_server: *std.ato
     try posix.listen(listener, 128);
 
     var polls: [4096]posix.pollfd = undefined;
-    polls[0] = .{
-        .fd = listener,
-        .events = posix.POLL.IN,
-        .revents = 0,
-    };
+    polls[0] = .{ .fd = listener, .events = posix.POLL.IN, .revents = 0 };
     var poll_count: usize = 1;
 
     while (!stop_server.load(.seq_cst)) {
-        // polls is the total number of connections we can monitor, but
-        // polls[0..poll_count] is the actual number of clients + the listening
-        // socket that are currently connected
         var active = polls[0..poll_count];
+        _ = try posix.poll(active, 100); // 100ms timeout to check stop_server
 
-        // 2nd argument is the timeout, -1 is infinity
-        _ = try posix.poll(active, -1);
-
-        // Active[0] is _always_ the listening socket. When this socket is ready
-        // we can accept. Putting it outside the following while loop means that
-        // we don't have to check if if this is the listening socket on each
-        // iteration
         if (active[0].revents != 0) {
-            // The listening socket is ready, accept!
-            // Notice that we pass SOCK.NONBLOCK to accept, placing the new client
-            // socket in non-blocking mode. Also, for now, for simplicity,
-            // we're not capturing the client address (the two null arguments).
-            const socket = try posix.accept(listener, null, null, posix.SOCK.NONBLOCK);
+            const client_fd = try posix.accept(listener, null, null, posix.SOCK.NONBLOCK);
 
-            // Add this new client socket to our polls array for monitoring
-            polls[poll_count] = .{
-                .fd = socket,
+            var client = try Client.init(client_fd, allocator);
+            try clients.put(client_fd, client);
 
-                // This will be SET by posix.poll to tell us what event is ready
-                // (or it will stay 0 if this socket isn't ready)
-                .revents = 0,
-
-                // We want to be notified about the POLL.IN event
-                // (i.e. can read without blocking)
-                .events = posix.POLL.IN,
-            };
-
-            // increment the number of active connections we're monitoring
-            // this can overflow our 4096 polls array. TODO: fix that!
-            poll_count += 1;
+            if (poll_count < polls.len) {
+                polls[poll_count] = .{
+                    .fd = client_fd,
+                    .events = posix.POLL.IN,
+                    .revents = 0,
+                };
+                poll_count += 1;
+            } else {
+                // Handle too many connections
+                posix.close(client_fd);
+                client.deinit();
+            }
         }
 
         var i: usize = 1;
         while (i < active.len) {
             const polled = active[i];
-
             const revents = polled.revents;
+
             if (revents == 0) {
-                // This socket isn't ready, go to the next one
                 i += 1;
                 continue;
             }
 
-            var closed = false;
+            var close_client = false;
 
-            // the socket is ready to be read
-            if (revents & posix.POLL.IN == posix.POLL.IN) {
-                var fixed_mem: [4096]u8 = undefined;
-                var buffer = Buffer.init(&fixed_mem, allocator);
-                defer buffer.deinit();
+            if (revents & posix.POLL.IN != 0) {
+                if (clients.getPtr(polled.fd)) |client| {
+                    close_client = try handleClientRead(client);
 
-                try buffer.ensureCapacity(4096);
-
-                while (true) {
-                    // Always make sure there is free space for new data
-                    const remaining = buffer.data.len - buffer.len;
-                    if (remaining < 512) { // low free space → expand
-                        try buffer.ensureCapacity(buffer.len + 4096);
+                    var result: ?commands.Command = null;
+                    const multi_size_str_len = client.buffer.multi_size_str.len + 3;
+                    if (client.buffer.len > 4 and client.buffer.multi_size > 0 and client.buffer.data[multi_size_str_len..client.buffer.len].len == client.buffer.multi_size + 2) {
+                        result = commands.parseCmd(client.fd, store, client.buffer.data[multi_size_str_len..client.buffer.len]);
+                        client.buffer.reset();
                     }
-
-                    const read_slice = buffer.data[buffer.len..];
-                    const read = posix.read(polled.fd, read_slice) catch 0;
-                    if (read == 0) {
-                        // Socket closed by peer
-                        break;
+                    if (client.buffer.multi_size == 0) {
+                        result = commands.parseCmd(client.fd, store, client.buffer.items());
+                        client.buffer.reset();
                     }
-
-                    buffer.len += read;
-                }
-                if (buffer.len == 0) {
-                    // probably closed on the other side
-                    closed = true;
-                } else {
-                    const msg = buffer.items();
-                    const result = try handleConnection(polled.fd, store, msg);
-                    if (result != null and std.mem.eql(u8, result.?, "SHUTDOWN")) {
+                    if (result == commands.Command.shutdown) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("tcp") catch {};
                     }
                 }
             }
 
-            // either the read failed, or we're being notified through poll
-            // that the socket is closed
-
-            if (closed or (revents & posix.POLL.HUP != 0) or (revents & posix.POLL.ERR != 0)) {
+            if (close_client or (revents & (posix.POLL.HUP | posix.POLL.ERR) != 0)) {
+                if (clients.fetchRemove(polled.fd)) |entry| {
+                    var client = entry.value;
+                    client.deinit();
+                }
                 posix.close(polled.fd);
 
-                // We use a simple trick to remove it: we swap it with the last
-                // item in our array, then "shrink" our array by 1
                 const last_index = active.len - 1;
                 active[i] = active[last_index];
                 active = active[0..last_index];
                 poll_count -= 1;
-
-                // don't increment `i` because we swapped out the removed item
-                // and shrank the array
             } else {
-                // not closed, go to the next socket
                 i += 1;
             }
         }
     }
 }
 
-pub fn handleConnection(fd: posix.fd_t, store: *KVStore, msg: []u8) !?[]const u8 {
-    return commands.parseCmd(fd, store, msg);
+fn handleClientRead(client: *Client) !bool {
+    const remaining = client.buffer.data.len - client.buffer.len;
+    if (remaining < 512) {
+        try client.buffer.ensureCapacity(client.buffer.len + 4096);
+    }
+
+    const read_slice = client.buffer.data[client.buffer.len..];
+    const read = posix.read(client.fd, read_slice) catch |err| switch (err) {
+        error.WouldBlock => return false,
+        else => return true, // close connection on error
+    };
+
+    if (read == 0) return true; // EOF
+
+    client.buffer.len += read;
+
+    if (client.buffer.multi_size == 0) {
+        const multi_size = parseMultiBufLength(client, 0);
+        client.buffer.multi_size = multi_size;
+    }
+
+    return false;
+}
+
+fn parseMultiBufLength(client: *Client, pos: usize) usize {
+    const buf = client.buffer.data;
+    if (pos >= buf.len or buf[pos] != '$') {
+        return 0; // invalid format
+    }
+    var i: usize = pos + 1;
+    // Find CRLF
+    while (i + 1 < buf.len) : (i += 1) {
+        if (buf[i] == '\r' and buf[i + 1] == '\n') {
+            const num_slice = buf[pos + 1 .. i];
+            client.buffer.multi_size_str = num_slice;
+            return std.fmt.parseInt(usize, num_slice, 10) catch 0;
+        }
+    }
+    return 0;
 }

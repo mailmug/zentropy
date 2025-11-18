@@ -7,6 +7,8 @@ allocator: std.mem.Allocator,
 data: []u8,
 len: usize,
 using_fba: bool,
+multi_size: usize,
+multi_size_str: []u8,
 
 pub fn init(fixed_mem: []u8, fallback: std.mem.Allocator) Buffer {
     var fba = std.heap.FixedBufferAllocator.init(fixed_mem);
@@ -17,6 +19,8 @@ pub fn init(fixed_mem: []u8, fallback: std.mem.Allocator) Buffer {
         .data = fixed_mem, // empty slice backed by fixed buffer
         .len = 0,
         .using_fba = true,
+        .multi_size = 0,
+        .multi_size_str = "",
     };
 }
 
@@ -39,10 +43,12 @@ fn switchToFallback(self: *Buffer) !void {
 
 pub fn ensureCapacity(self: *Buffer, needed: usize) !void {
     if (needed <= self.data.len) return;
+
     if (self.using_fba) {
         try self.switchToFallback();
         return;
     }
+
     const new_data = try self.allocator.realloc(self.data, needed);
     self.data = new_data;
 }
@@ -74,4 +80,6 @@ pub fn reset(self: *Buffer) void {
     self.allocator = self.fba.allocator();
     self.using_fba = true;
     self.len = 0;
+    self.multi_size = 0;
+    self.multi_size_str = "";
 }
