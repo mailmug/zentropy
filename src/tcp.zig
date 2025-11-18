@@ -84,8 +84,17 @@ pub fn startServer(store: *KVStore, stop_server: *std.atomic.Value(bool), app_co
             if (revents & posix.POLL.IN != 0) {
                 if (clients.getPtr(polled.fd)) |client| {
                     close_client = try handleClientRead(client);
-                    const result = handleConnection(client, store, client.buffer.items(), app_config);
-                    // client.buffer.reset();
+
+                    var result: ?commands.Command = null;
+                    const multi_size_str_len = client.buffer.multi_size_str.len + 3;
+                    if (client.buffer.len > 4 and client.buffer.multi_size > 0 and client.buffer.data[multi_size_str_len..client.buffer.len].len == client.buffer.multi_size + 2) {
+                        result = handleConnection(client, store, client.buffer.data[multi_size_str_len..client.buffer.len], app_config);
+                        client.buffer.reset();
+                    }
+                    if (client.buffer.multi_size == 0) {
+                        result = handleConnection(client, store, client.buffer.items(), app_config);
+                        client.buffer.reset();
+                    }
                     if (result == commands.Command.shutdown) {
                         stop_server.store(true, .seq_cst);
                         shutdown.send("unix_socket") catch {};
@@ -130,28 +139,49 @@ pub fn handleConnection(client: *Client, store: *KVStore, msg: []u8, app_config:
             return null;
         }
     }
+
     return commands.parseCmd(client.fd, store, msg);
 }
 
 fn handleClientRead(client: *Client) !bool {
-    while (true) {
-        const remaining = client.buffer.data.len - client.buffer.len;
-        if (remaining < 512) {
-            try client.buffer.ensureCapacity(client.buffer.len + 4096);
-        }
+    const remaining = client.buffer.data.len - client.buffer.len;
+    if (remaining < 512) {
+        try client.buffer.ensureCapacity(client.buffer.len + 4096);
+    }
 
-        const read_slice = client.buffer.data[client.buffer.len..];
-        const read = posix.read(client.fd, read_slice) catch |err| switch (err) {
-            error.WouldBlock => break,
-            else => return true, // close connection on error
-        };
+    const read_slice = client.buffer.data[client.buffer.len..];
+    const read = posix.read(client.fd, read_slice) catch |err| switch (err) {
+        error.WouldBlock => return false,
+        else => return true, // close connection on error
+    };
 
-        if (read == 0) break; // EOF
+    if (read == 0) return true; // EOF
 
-        client.buffer.len += read;
+    client.buffer.len += read;
+
+    if (client.buffer.multi_size == 0) {
+        const multi_size = parseMultiBufLength(client, 0);
+        client.buffer.multi_size = multi_size;
     }
 
     return false;
+}
+
+fn parseMultiBufLength(client: *Client, pos: usize) usize {
+    const buf = client.buffer.data;
+    if (pos >= buf.len or buf[pos] != '$') {
+        return 0; // invalid format
+    }
+    var i: usize = pos + 1;
+    // Find CRLF
+    while (i + 1 < buf.len) : (i += 1) {
+        if (buf[i] == '\r' and buf[i + 1] == '\n') {
+            const num_slice = buf[pos + 1 .. i];
+            client.buffer.multi_size_str = num_slice;
+            return std.fmt.parseInt(usize, num_slice, 10) catch 0;
+        }
+    }
+    return 0;
 }
 
 fn trimCrlf(s: []u8) []u8 {
